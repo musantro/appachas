@@ -28,8 +28,9 @@ with local synonyms in code.
 | --- | --- | --- |
 | Backend runtime | Python 3.13 | Backend code uses the `backend/` project and `uv` manages dependencies. |
 | HTTP backend | FastAPI | FastAPI is an infrastructure adapter, not a domain or application dependency. |
+| Dependency injection | `dependency-injector` | The container composes application services and infrastructure adapters at the composition root; FastAPI `Depends` remains responsible for request-scoped HTTP dependencies. |
 | Database | PostgreSQL | PostgreSQL is the production persistence boundary. |
-| Database driver | Psycopg 3, synchronous API | Runtime persistence uses direct `psycopg` operations. No ORM models are shared with the domain. |
+| Database driver | Psycopg 3, synchronous API | Runtime persistence uses direct `psycopg` operations. HTTP endpoints that invoke it use regular `def` handlers. No ORM models are shared with the domain. |
 | Migrations | Alembic with explicit SQL migrations | Alembic is migration tooling only; migration files contain the database schema changes explicitly. |
 | Frontend | React + TypeScript + Vite | Vite produces a static build. The frontend has no server-side rendering. |
 | Frontend data | React Router + TanStack Query + typed `fetch` adapter | Routing, server state and HTTP transport remain separate concerns. |
@@ -67,6 +68,9 @@ backend/
   src/
     appachas/
       main.py
+      infrastructure/
+        bootstrap/
+          container.py
       contexts/
         groups/
           <capability>/
@@ -140,8 +144,8 @@ The allowed imports are:
 
 | Layer | May import | Must not import |
 | --- | --- | --- |
-| `domain` | Python standard library, its own domain modules and approved Shared Kernel domain code | `application`, `infrastructure`, FastAPI, Pydantic, Psycopg, Alembic, HTTP, filesystem and environment configuration |
-| `application` | Python standard library, domain code, application code and approved Shared Kernel code | `infrastructure`, FastAPI, Pydantic, Psycopg, SQL and HTTP types |
+| `domain` | Python standard library, its own domain modules and approved Shared Kernel domain code | `application`, `infrastructure`, FastAPI, Pydantic, Psycopg, Alembic, `dependency_injector`, HTTP, filesystem and environment configuration |
+| `application` | Python standard library, domain code, application code and approved Shared Kernel code | `infrastructure`, FastAPI, Pydantic, Psycopg, `dependency_injector`, SQL and HTTP types |
 | `infrastructure` | Domain, application, infrastructure and external libraries | Nothing outside the normal dependency and security rules |
 
 Cross-slice imports into internal modules are forbidden. Slices collaborate
@@ -157,6 +161,105 @@ These rules are executable. Backend architecture tests build an import graph
 from the Python AST and fail when a forbidden dependency, forbidden external
 library or cross-slice internal import is introduced.
 
+### Composition root and dependency injection
+
+Appachas uses `dependency-injector` as its application composition mechanism.
+The container is created once by the infrastructure bootstrap and wires
+configuration, concrete adapters and application handlers. The domain and
+application layers receive their dependencies through constructors and never
+import the container, providers or wiring markers.
+
+`dependency-injector` and FastAPI `Depends` have separate responsibilities:
+
+- `dependency-injector` builds the application object graph: repositories,
+  clocks, token services, handlers and external clients;
+- FastAPI `Depends` resolves HTTP/request concerns: authenticated actor,
+  request data, cookies, headers and resources that must be closed at the end
+  of a request;
+- an HTTP adapter may bridge both systems with
+  `Depends(Provide[Container.some_provider])`;
+- no service is constructed by both systems. The container owns application
+  services, while FastAPI owns request lifecycle and transport dependencies.
+
+The composition root is the only place that binds ports to concrete adapters.
+Use `ThreadSafeSingleton` for shared process-level objects such as a
+thread-safe connection pool, `Factory` for handlers and other short-lived
+application services, and an explicit lifespan or request resource for database
+connections and transactions. A plain `Singleton` is not used for shared
+objects in the multi-threaded HTTP process unless access is synchronized
+explicitly. Each command handler defines one transaction boundary; infrastructure
+enforces it and performs commit or rollback. Dependency injection never hides
+those operations inside the domain.
+
+`ThreadSafeSingleton` protects provider creation; it does not make the object
+returned by the provider thread-safe. A shared object must be intrinsically
+thread-safe or must not be shared.
+
+The container holds the connection pool provider, while the FastAPI lifespan
+owns startup and shutdown. Lifespan startup opens the pool and shutdown closes
+it. A request-scoped FastAPI dependency acquires one connection, yields it to
+the infrastructure transaction adapter and always returns or closes it. The
+adapter starts one transaction around each command handler invocation and
+commits or rolls back before the request-scoped dependency finishes. Repositories
+participating in that command share the same connection; queries use a
+short-lived read connection.
+
+Provider scopes are explicit:
+
+| Scope | Mechanism | Examples | Lifecycle owner |
+| --- | --- | --- | --- |
+| Process | `ThreadSafeSingleton` | Immutable configuration and a thread-safe connection pool | Container plus FastAPI lifespan |
+| Request | FastAPI `Depends` generator | Authenticated actor, connection and request transaction | FastAPI request lifecycle |
+| Handler/operation | `Factory` | Application handlers and short-lived application services | The injection site |
+| Test | Fresh container or provider override | Fakes, mocks and test configuration | The test fixture |
+
+The container is wired explicitly with `container.wire()` for the HTTP adapter
+modules during application creation. It is not wired or rebuilt for every
+request. Tests that wire modules unwire them during teardown, and tests that
+override providers reset those overrides after the scenario.
+
+A typical HTTP bridge has this shape:
+
+```python
+from typing import Annotated
+
+from dependency_injector import containers, providers
+from dependency_injector.wiring import Provide, inject
+from fastapi import Depends
+
+
+class Container(containers.DeclarativeContainer):
+    # Concrete providers are declared here in the real composition root.
+    # The domain and application layers do not import this class.
+    claim_member_handler = providers.Factory(
+        ClaimMemberHandler,
+        group_repository=group_repository,
+        token_service=token_service,
+        clock=clock,
+    )
+
+
+@router.post("/claim")
+@inject
+def claim_member(
+    request: ClaimMemberRequest,
+    handler: Annotated[
+        ClaimMemberHandler,
+        Depends(Provide[Container.claim_member_handler]),
+    ],
+):
+    command = request.to_command()
+    result = handler.handle(command)
+    return ClaimMemberResponse.from_result(result)
+```
+
+The example is illustrative; each provider is declared in the composition root
+with the concrete adapters required by the slice. The `@inject` decorator is
+placed immediately below the FastAPI route decorator. The container is wired
+when the application is created, not for every request. Direct constructor
+injection remains the preferred form inside domain and application code because
+it keeps those objects easy to instantiate in isolation.
+
 ## Layer responsibilities
 
 ### Domain
@@ -171,8 +274,8 @@ The domain contains:
 - value objects for concepts such as money in cents, dates, aliases and tokens;
 - domain services when a rule does not naturally belong to one entity or
   aggregate;
-- domain events only when a concrete requirement justifies them; the MVP does
-  not introduce an event bus;
+- no domain events or event bus in the MVP; introducing them requires a
+  documented architectural decision;
 - domain exceptions for expected business rule failures;
 - repository or service ports when the domain itself needs those contracts.
 
@@ -197,10 +300,9 @@ The application contains:
 Commands change state. Queries read state and do not mutate it. The MVP uses
 explicit handlers and does not introduce a command bus or query bus.
 
-Each command handler executes inside one database transaction. The handler may
-coordinate multiple repositories, but the transaction is committed only after
-the complete command succeeds and is rolled back when an expected or unexpected
-exception leaves the handler.
+Each command handler defines one database transaction. The infrastructure
+transaction adapter commits only after the complete command succeeds and rolls
+back when an expected or unexpected exception leaves the handler.
 
 ### Infrastructure
 
@@ -215,7 +317,10 @@ Infrastructure contains:
   `infrastructure/persistence`;
 - connection and transaction lifecycle management;
 - concrete clock, token, cookie and scheduler adapters;
-- configuration loading, logging, error mapping and composition wiring.
+- configuration loading, logging, error mapping and composition wiring through
+  `infrastructure/bootstrap/container.py`;
+- `dependency-injector` providers that bind application ports to concrete
+  infrastructure implementations.
 
 Infrastructure may depend on every inner layer, but inner layers never import
 infrastructure to obtain a concrete implementation.
@@ -471,8 +576,13 @@ small AST/import-graph checker owned by the repository and assert:
 - `application` has no dependency on `infrastructure`;
 - FastAPI, Pydantic, Psycopg and Alembic imports occur only in infrastructure or
   migration tooling;
+- `dependency_injector` imports in production code occur only in infrastructure
+  bootstrap and HTTP adapters;
 - cross-slice internal imports do not exist;
-- composition remains in the infrastructure bootstrap;
+- composition remains in the infrastructure bootstrap and the application is
+  wired once during startup;
+- provider scopes match the documented process, request, operation and test
+  lifecycles, and request resources are released after success and failure;
 - the expected `domain`, `application` and `infrastructure` directories exist
   only where the slice actually has that responsibility.
 
@@ -491,6 +601,7 @@ Every pull request runs:
 - `ty` type checking;
 - Biome formatting and linting;
 - backend unit tests;
+- dependency-injection bootstrap and lifecycle tests using fake providers;
 - frontend Vitest and Testing Library tests;
 - backend architecture tests;
 - OpenAPI type regeneration and a clean-diff check when the API contract is
@@ -529,6 +640,12 @@ Before merging a change, the author confirms:
 - Frontend components follow [`DESIGN.md`](../DESIGN.md) and do not duplicate
   backend business calculations.
 - OpenAPI-derived frontend types are regenerated rather than edited manually.
+- New application services and adapters are registered in the composition root;
+  domain and application code never imports `dependency_injector`.
+- HTTP adapters use `Depends` for request concerns and `Provide` only to bridge
+  to a container provider; they do not create application services directly.
+- Shared providers use only the documented scope, and request-scoped resources
+  are closed on both successful and failing requests.
 - The applicable quality gates pass.
 
 ## References
@@ -536,6 +653,8 @@ Before merging a change, the author confirms:
 - [Product requirements](../MVP.md)
 - [Frontend design system](../DESIGN.md)
 - [FastAPI frontend serving](https://fastapi.tiangolo.com/tutorial/frontend/)
+- [Dependency Injector FastAPI example](https://python-dependency-injector.ets-labs.org/examples/fastapi.html)
+- [Dependency Injector wiring](https://python-dependency-injector.ets-labs.org/wiring.html)
 - [Psycopg 3 basic usage](https://www.psycopg.org/psycopg3/docs/basic/usage.html)
 - [Psycopg 3 transaction management](https://www.psycopg.org/psycopg3/docs/basic/transactions.html)
 - [CodelyTV hexagonal architecture ESLint plugin](https://github.com/CodelyTV/eslint-plugin-hexagonal-architecture)
