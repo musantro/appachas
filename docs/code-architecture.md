@@ -13,6 +13,8 @@ The sources of truth are separated by concern:
 
 - [`MVP.md`](../MVP.md) defines product behaviour and business acceptance criteria.
 - [`DESIGN.md`](../DESIGN.md) defines frontend visual and accessibility standards.
+- [`algoritmo.md`](algoritmo.md) defines the normative money, balance and settlement algorithms.
+- [`security-and-sessions.md`](security-and-sessions.md) defines the access-token, session and cookie contract.
 - [`AGENTS.md`](../AGENTS.md) defines repository-level collaboration instructions.
 - This document defines code structure, boundaries, dependencies and testing
   conventions.
@@ -400,9 +402,9 @@ Validation follows the same boundary rule:
 
 Concurrency is part of the infrastructure contract without moving business
 rules into SQL. Identity claims are atomic and protected by PostgreSQL
-constraints and locking or conditional updates. Movement edits use an expected
-version; an update that does not match the expected version becomes a typed
-conflict and returns `409 Conflict`.
+constraints and locking or conditional updates. Movement edits and deletes use
+an expected version; an operation that does not match the expected version
+becomes a typed conflict and returns `409 Conflict`.
 
 Group expiry is an idempotent application command. A scheduler outside the HTTP
 process invokes it. The FastAPI process does not rely on an in-process recurring
@@ -453,8 +455,10 @@ stack traces, raw SQL, tokens or secrets to the client.
 ## Security and sessions
 
 Appachas has no user accounts or passwords. Access is based on high-entropy,
-opaque random tokens. Raw access tokens are not stored in PostgreSQL; only a
-one-way hash is persisted for lookup and revocation by group deletion.
+opaque random tokens and a session cookie after the initial link exchange. The
+complete contract is in [`security-and-sessions.md`](security-and-sessions.md).
+Raw access tokens are not stored in PostgreSQL; only a one-way hash is persisted
+for lookup and revocation by group deletion.
 
 After a successful identity claim, the backend issues the persistent session
 credential through an HttpOnly cookie. In production the cookie is Secure and
@@ -493,7 +497,9 @@ documentation:
 
 The product copy remains Spanish. The translation boundary is the frontend;
 the backend exposes stable English error codes and Spanish fallback details.
-Business definitions and examples remain in [`MVP.md`](../MVP.md).
+Business definitions and acceptance criteria remain in [`MVP.md`](../MVP.md);
+money, balance and settlement rules remain in
+[`algoritmo.md`](algoritmo.md).
 
 ## Testing conventions
 
@@ -652,6 +658,8 @@ Before merging a change, the author confirms:
 
 - [Product requirements](../MVP.md)
 - [Frontend design system](../DESIGN.md)
+- [Money, balance and settlement algorithms](algoritmo.md)
+- [Access, sessions and cookies](security-and-sessions.md)
 - [FastAPI frontend serving](https://fastapi.tiangolo.com/tutorial/frontend/)
 - [Dependency Injector FastAPI example](https://python-dependency-injector.ets-labs.org/examples/fastapi.html)
 - [Dependency Injector wiring](https://python-dependency-injector.ets-labs.org/wiring.html)

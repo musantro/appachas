@@ -25,7 +25,7 @@ Usuario principal: una persona que organiza un viaje o plan y necesita repartir 
 - **Mobile first:** todo el flujo debe funcionar cómodamente desde un teléfono.
 - **Efímero:** el grupo se puede cerrar y sus datos se eliminan.
 - **Transparente:** proyecto open source, licencia MIT y reglas de cálculo comprensibles.
-- **Privacidad por defecto:** no se usan cookies ni servicios de analítica de terceros y no se recopila telemetría de producto.
+- **Privacidad por defecto:** no se usan cookies de seguimiento, analítica o publicidad ni servicios de analítica de terceros y no se recopila telemetría de producto. La sesión técnica usa una cookie propia `HttpOnly`, según [`docs/security-and-sessions.md`](docs/security-and-sessions.md).
 
 ## Alcance funcional
 
@@ -72,7 +72,7 @@ La primera entrada por el enlace común pasa por un asistente en el que la perso
 
 La reclamación se registra en backend de forma atómica. Solo un dispositivo puede tener reclamada cada identidad. Si dos dispositivos reclaman simultáneamente la misma identidad, uno entra y el otro recibe un error de conflicto del tipo «Este integrante ya está ocupado» y vuelve al selector. Las identidades ocupadas permanecen visibles pero deshabilitadas. Si todas están ocupadas, no se puede acceder a la lista y se indica que hay que pedir al creador que libere una.
 
-La selección local se conserva hasta borrar los datos del sitio. Un integrante puede cambiarse desde la pantalla de Opciones a otra identidad disponible; la operación libera la identidad anterior y reclama la nueva de forma atómica. El creador puede liberar identidades de otros integrantes. Un integrante que pierde los datos locales debe pedir al creador que libere su identidad para volver a reclamarla.
+La selección local se conserva hasta borrar los datos del sitio y solo sirve para recordar la identidad en la interfaz; el acceso autenticado se mantiene mediante la sesión descrita en [`docs/security-and-sessions.md`](docs/security-and-sessions.md). Un integrante puede cambiarse desde la pantalla de Opciones a otra identidad disponible; la operación libera la identidad anterior y reclama la nueva de forma atómica. El creador puede liberar identidades de otros integrantes. Un integrante que pierde los datos locales debe pedir al creador que libere su identidad para volver a reclamarla.
 
 El alias es global y lo ve todo el grupo. El integrante puede cambiar su propio alias desde Opciones y el creador puede renombrar a cualquier integrante. El cambio conserva el identificador interno, actualiza el historial y se rechaza si crea un duplicado.
 
@@ -111,13 +111,13 @@ Los movimientos tienen una fecha obligatoria:
 
 El grupo permanece activo hasta que el creador lo cierre o se elimine automáticamente. Después de la fecha final todavía se pueden registrar movimientos con fecha válida mientras el grupo siga disponible.
 
-La caducidad automática se calcula desde la fecha final:
+La fecha final del viaje es el ancla que inicia el control de caducidad. Las comparaciones se hacen con fechas de calendario en la zona horaria guardada del grupo. La caducidad automática se calcula desde esa fecha:
 
-- se elimina después de 10 días sin registrar ningún movimiento nuevo;
-- existe un límite absoluto de 30 días desde la fecha final;
-- registrar un gasto, reembolso o aportación reinicia la ventana de 10 días, pero nunca prolonga el límite absoluto;
+- si no se registra ningún movimiento nuevo después de la fecha final, se elimina cuando `hoy >= fecha_final + 10 días`;
+- existe un límite absoluto y no ampliable cuando `hoy >= fecha_final + 30 días`;
+- registrar un gasto, reembolso o aportación después de la fecha final reinicia la ventana de 10 días desde el día de registro (`created_at`), pero nunca prolonga el límite absoluto;
 - abrir el grupo, consultar datos, copiar o compartir no cuenta como actividad;
-- si se registra actividad en el día 29, el grupo se elimina igualmente al llegar el día 30.
+- si se registra actividad en el día 29, el grupo se elimina igualmente cuando `hoy >= fecha_final + 30 días`.
 
 Al cerrar manualmente, el creador confirma una acción irreversible. La interfaz conserva en esa pantalla el resumen completo, pero no lo guarda localmente. El backend elimina inmediatamente el grupo, integrantes, movimientos y repartos. Cualquier petición posterior devuelve `404`.
 
@@ -160,11 +160,17 @@ El historial mezcla tres tipos de movimiento y los identifica con una etiqueta:
 - una aportación puede ser de una persona a una o varias personas;
 - una aportación no se puede convertir en gasto o reembolso, ni estos en aportación.
 
-Los importes se introducen con coma o punto decimal, se normalizan a céntimos y no se aceptan importes negativos introducidos por el usuario. No hay un máximo de importe de producto; el backend aplica límites técnicos seguros para evitar overflow y abuso.
+Los importes se introducen con coma o punto decimal, se normalizan a céntimos y no se aceptan importes negativos introducidos por el usuario. La pantalla limita la parte decimal a un máximo de dos posiciones y muestra un error si se supera. La API aplica la misma validación y rechaza la petición con `422`; no trunca ni redondea silenciosamente. La capa de dominio recibe únicamente enteros en céntimos. No hay un máximo de importe de producto; el backend aplica límites técnicos seguros para evitar overflow y abuso.
+
+Las asignaciones personalizadas de una aportación pueden ser de cero céntimos. Esto permite conservar un receptor seleccionado aunque el reparto igualitario no alcance un céntimo para cada persona; la suma de todas las asignaciones debe seguir coincidiendo exactamente con el total.
 
 Cualquier integrante con el enlace común y el creador puede editar o eliminar cualquier tipo de movimiento. Toda eliminación pide confirmación. Una edición reemplaza directamente los datos anteriores, conserva `created_at` y recalcula de inmediato total, balances y liquidación.
 
 ### 5. Balances y liquidación
+
+La definición matemática normativa de reparto, balances y liquidación está en
+[`docs/algoritmo.md`](docs/algoritmo.md). Este documento conserva las reglas de
+producto, permisos, fechas y criterios de aceptación.
 
 Los importes se almacenan en céntimos. El criterio de reparto de céntimos sobrantes es el orden de alta de los integrantes: el primer integrante según ese orden recibe el primer céntimo sobrante. Renombrar no altera el orden.
 
@@ -237,18 +243,18 @@ La pantalla ofrece botones separados de «Copiar texto» y «Compartir» mediant
 - **Persistencia:** PostgreSQL.
 - **Identidad local:** almacenamiento persistente del navegador hasta borrar los datos del sitio, combinado con una reclamación server-side.
 - **Zona horaria:** identificador IANA del creador almacenado en el grupo.
-- **Acceso:** dos tokens secretos independientes, uno de creador y uno de integrantes; nunca un ID incremental como credencial.
-- **Conflictos:** versión del movimiento para rechazar guardados basados en datos antiguos.
+- **Acceso:** dos tokens secretos independientes, uno de creador y uno de integrantes, que solo sirven para iniciar la sesión; las operaciones posteriores usan la sesión `HttpOnly` descrita en [`docs/security-and-sessions.md`](docs/security-and-sessions.md). Nunca se usa un ID incremental como credencial.
+- **Conflictos:** versión del movimiento para rechazar ediciones y borrados basados en datos antiguos.
 - **Caducidad:** tarea de backend que elimina por inactividad o por límite absoluto.
 - **Operación:** logs sin nombres, alias, conceptos, importes ni tokens completos.
-- **Privacidad:** sin cookies, analítica de terceros ni telemetría de producto.
+- **Privacidad:** sin cookies de seguimiento, analítica o publicidad, analítica de terceros ni telemetría de producto; la cookie técnica de sesión está limitada al funcionamiento de la aplicación.
 - **Licencia:** MIT.
 
 Entidades mínimas:
 
 - `groups`: id interno, nombre, hash del token de creador, hash del token común, integrante creador, moneda, fecha inicial, fecha final, zona horaria, fechas de creación y estado temporal;
 - `members`: id interno, grupo, alias, posición de alta y estado de reclamación;
-- `movements`: id, grupo, tipo, concepto opcional, importe firmado o total positivo según tipo, pagador/origen, fecha del movimiento, `created_at`, `updated_at` y versión;
+- `movements`: id, grupo, tipo, concepto opcional, importe positivo en céntimos (el tipo determina el signo para gastos y reembolsos), pagador/origen, fecha del movimiento, `created_at`, `updated_at` y versión;
 - `movement_allocations`: movimiento, integrante, rol de participante o receptor e importe asignado;
 - reclamaciones de identidad: integrante, credencial de navegador persistente, fechas de reclamación y liberación.
 
@@ -260,17 +266,18 @@ Las rutas finales pueden variar, pero deben conservar esta separación de permis
 
 - `POST /api/groups` — crear grupo, integrantes, zona horaria y los dos tokens; devuelve ambas URLs.
 - `GET /api/groups/{member-token}/metadata` — obtener datos básicos y estado de identidades antes de reclamar.
-- `POST /api/groups/{member-token}/claims` — reclamar una identidad o cambiar atómicamente a otra disponible; devuelve la credencial de sesión persistente.
-- `GET /api/groups/{access-token}` — obtener grupo, movimientos, balances y permisos después de identificarse.
-- `POST /api/groups/{access-token}/movements` — añadir gasto, reembolso o aportación.
-- `PUT /api/groups/{access-token}/movements/{id}` — editar un movimiento con versión esperada.
-- `DELETE /api/groups/{access-token}/movements/{id}` — eliminar un movimiento tras confirmación de interfaz.
-- `GET /api/groups/{access-token}/settlement` — calcular balances y liquidación actual.
-- `PUT /api/groups/{creator-token}` — editar nombre y fechas desde el enlace de creador.
-- `POST/PUT/DELETE /api/groups/{creator-token}/members` — gestionar integrantes desde el enlace de creador, respetando las reglas de historial e identidad.
-- `DELETE /api/groups/{creator-token}` — cerrar y eliminar el grupo.
+- `POST /api/groups/{member-token}/claims` — reclamar una identidad o cambiar atómicamente a otra disponible; establece la cookie de sesión persistente.
+- `POST /api/groups/{creator-token}/session` — iniciar una sesión de creador desde el enlace privado y reclamar automáticamente la identidad creadora.
+- `GET /api/groups/session` — obtener grupo, movimientos, balances y permisos después de identificarse.
+- `POST /api/groups/session/movements` — añadir gasto, reembolso o aportación.
+- `PUT /api/groups/session/movements/{id}` — editar un movimiento con versión esperada.
+- `DELETE /api/groups/session/movements/{id}` — eliminar un movimiento con versión esperada y tras confirmación de interfaz.
+- `GET /api/groups/session/settlement` — calcular balances y liquidación actual.
+- `PUT /api/groups/session/group` — editar nombre y fechas desde una sesión de creador.
+- `POST/PUT/DELETE /api/groups/session/members` — gestionar integrantes desde una sesión de creador, respetando las reglas de historial e identidad.
+- `DELETE /api/groups/session/group` — cerrar y eliminar el grupo.
 
-Las operaciones con una versión antigua devuelven `409 Conflict`. Una reclamación simultánea de la misma identidad también devuelve `409`. Un token inválido, cerrado o caducado devuelve `404` sin distinguir públicamente la causa.
+Las operaciones de edición o borrado con una versión antigua devuelven `409 Conflict`. Una reclamación simultánea de la misma identidad también devuelve `409`. Un token inválido, cerrado o caducado devuelve `404` sin distinguir públicamente la causa. El contrato completo de tokens, sesiones y cookies está en [`docs/security-and-sessions.md`](docs/security-and-sessions.md).
 
 ## Requisitos no funcionales
 
@@ -337,7 +344,7 @@ El MVP se considera listo cuando:
 - un guardado basado en una versión antigua se rechaza sin sobrescribir cambios visibles para otra persona;
 - la liquidación muestra únicamente pagos residuales y se puede copiar o compartir cuando existen;
 - cerrar o caducar elimina los datos operativos y hace que el enlace devuelva `404`;
-- no se recopila analítica de producto ni se usan cookies;
+- no se recopila analítica de producto ni se usan cookies de seguimiento, analítica o publicidad; la cookie técnica de sesión está limitada al funcionamiento de la aplicación;
 - los flujos principales pasan pruebas end-to-end en vista móvil;
 - el repositorio permite levantar React, FastAPI y PostgreSQL con instrucciones claras y licencia MIT.
 
@@ -407,5 +414,5 @@ El MVP se considera listo cuando:
 - **US-62 — Lecturas no activan grupo:** Como sistema, dado que alguien abre, consulta, copia o comparte el grupo sin registrar movimientos, cuando se calcula la caducidad, entonces esas acciones no deben reiniciar la inactividad.
 - **US-63 — Acceso no disponible:** Como usuario, dado que el token es inválido, el grupo está cerrado o ha caducado, cuando intento acceder, entonces debo recibir una pantalla genérica de grupo no disponible y la API debe responder `404`.
 - **US-64 — Privacidad de logs:** Como responsable de operación, dado que se procesan peticiones, cuando se escriben logs, entonces no deben contener nombres, alias, conceptos, importes ni tokens completos.
-- **US-65 — Sin telemetría:** Como usuario, dado que utilizo Appachas, cuando navego y registro movimientos, entonces no deben enviarse eventos de producto, cookies ni datos a servicios de analítica de terceros.
+- **US-65 — Sin telemetría:** Como usuario, dado que utilizo Appachas, cuando navego y registro movimientos, entonces no deben enviarse eventos de producto, cookies de seguimiento ni datos a servicios de analítica de terceros; la única cookie permitida es la técnica de sesión propia.
 - **US-66 — Accesibilidad móvil:** Como usuario, dado que utilizo teclado, lector de pantalla o una pantalla de 320 px, cuando recorro cualquier flujo principal, entonces debo poder leer, enfocar y activar todos los controles sin perder contenido.

@@ -185,7 +185,7 @@ components:
 
 Appachas is a lightweight shared-expense product. Its visual identity should feel like a clear shared table: friendly, trustworthy and easy to scan when people are moving quickly. The system uses a calm, paper-like light surface, a single confident blue for action, and green for positive confirmation.
 
-The design language is intentionally restrained. It should reduce cognitive load, make numerical information easy to compare, and communicate trust without implying account-level identity or payment security. Product-specific flows, screen architecture and microcopy live in `PRODUCT_DESIGN.md`; this file is the source of truth for visual decisions.
+The design language is intentionally restrained. It should reduce cognitive load, make numerical information easy to compare, and communicate trust without implying account-level identity or payment security. Product-specific flows and screen architecture are described in [`MVP.md`](MVP.md); this file is the source of truth for visual decisions.
 
 ## Colors
 
