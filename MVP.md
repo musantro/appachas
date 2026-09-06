@@ -256,6 +256,8 @@ Entidades mínimas:
 - `members`: id interno, grupo, alias, posición de alta y estado de reclamación;
 - `movements`: id, grupo, tipo, concepto opcional, importe positivo en céntimos (el tipo determina el signo para gastos y reembolsos), pagador/origen, fecha del movimiento, `created_at`, `updated_at` y versión;
 - `movement_allocations`: movimiento, integrante, rol de participante o receptor e importe asignado;
+- `sessions`: hash del identificador opaco de sesión, grupo, integrante/actor,
+  estado activo o revocado, fechas de creación y revocación;
 - reclamaciones de identidad: integrante, credencial de navegador persistente, fechas de reclamación y liberación.
 
 Los nombres y textos completos se eliminan de la base de datos operativa al cerrar o caducar. La política del MVP garantiza el borrado inmediato de la base de datos operativa; la retención de copias de seguridad queda fuera del alcance de esta versión.
@@ -274,7 +276,9 @@ Las rutas finales pueden variar, pero deben conservar esta separación de permis
 - `DELETE /api/groups/session/movements/{id}` — eliminar un movimiento con versión esperada y tras confirmación de interfaz.
 - `GET /api/groups/session/settlement` — calcular balances y liquidación actual.
 - `PUT /api/groups/session/group` — editar nombre y fechas desde una sesión de creador.
-- `POST/PUT/DELETE /api/groups/session/members` — gestionar integrantes desde una sesión de creador, respetando las reglas de historial e identidad.
+- `POST /api/groups/session/members` — añadir un integrante desde una sesión de creador.
+- `PUT /api/groups/session/members/{id}` — renombrar o actualizar un integrante.
+- `DELETE /api/groups/session/members/{id}` — eliminar un integrante respetando las reglas de historial e identidad.
 - `DELETE /api/groups/session/group` — cerrar y eliminar el grupo.
 
 Las operaciones de edición o borrado con una versión antigua devuelven `409 Conflict`. Una reclamación simultánea de la misma identidad también devuelve `409`. Un token inválido, cerrado o caducado devuelve `404` sin distinguir públicamente la causa. El contrato completo de tokens, sesiones y cookies está en [`docs/security-and-sessions.md`](docs/security-and-sessions.md).
