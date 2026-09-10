@@ -21,6 +21,23 @@ of group and session tokens are persisted in PostgreSQL. Share links are kept
 only in memory for the current document, never in browser storage or history
 state. After reloading, use the originally saved or shared link to share again.
 
+## Automatic domain session transfer
+
+The owner requested transparent migration from `appachas.vercel.app` to
+`appachas.es`, including later visits through old links. Host-only cookies
+remain isolated. A four-phase, two-minute transfer binds a single-use code to
+the destination browser, authenticates the existing source cookie and proves
+receipt of the destination cookie before revoking the source session. Pending
+cookies do not authorize ordinary API requests. Confirmation activates the
+destination and revokes only the migrated source session in one transaction.
+
+The frontend checks for a valid destination session first and never replaces
+one. It navigates only between configured, distinct hosts and allowlisted group
+paths. The old host must serve the bridge, not a blanket HTTP redirect. No new
+secret or weaker cookie policy is needed. Cleared cookies and released claims
+retain the existing recovery rules. See `custom-domain.md` for rollout and
+the real two-host browser test configuration.
+
 ## Canonical money representation
 
 `algoritmo.md` is normative. Domain objects and PostgreSQL store positive

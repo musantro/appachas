@@ -4,6 +4,45 @@ import { ApiError, api } from "../../src/lib/api";
 afterEach(() => vi.unstubAllGlobals());
 
 describe("typed HTTP adapter", () => {
+  it("uses cookie-only POSTs for every migration phase and never returns a session secret", async () => {
+    const transport = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "migration-id" })),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: "one-use-code" })),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ group: { id: "group-id" } })),
+      );
+    vi.stubGlobal("fetch", transport);
+    await api.migrationStart("group-id");
+    await api.migrationAuthorize("group-id", "migration-id");
+    await api.migrationRedeem("group-id", "migration-id", "one-use-code");
+    await api.migrationConfirm("group-id", "migration-id");
+    for (const [path, request] of transport.mock.calls) {
+      expect(path).toMatch(/^\/api\/group\/migration\/\w+$/);
+      expect(request).toMatchObject({
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "X-Appachas-Group": "group-id",
+          "Content-Type": "application/json",
+        },
+      });
+      expect(request.headers).not.toHaveProperty("Authorization");
+    }
+    expect(
+      transport.mock.calls.map(([, request]) => JSON.parse(request.body)),
+    ).toEqual([
+      {},
+      { id: "migration-id" },
+      { id: "migration-id", code: "one-use-code" },
+      { id: "migration-id" },
+    ]);
+  });
   it("uses only the public group reference and session cookie after authentication", async () => {
     // Arrange / Given
     const transport = vi

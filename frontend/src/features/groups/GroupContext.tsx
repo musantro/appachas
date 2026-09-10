@@ -11,7 +11,11 @@ import {
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Feedback, Loading } from "../../components/common";
 import { Button } from "../../components/ui/button";
-import { rememberEntryToken } from "../../lib/access";
+import {
+  forgetPendingEntry,
+  pendingEntry,
+  rememberEntryToken,
+} from "../../lib/access";
 import { ApiError, api, type Group } from "../../lib/api";
 import { groupPath } from "../../lib/format";
 import { ClaimIdentity } from "./ClaimIdentity";
@@ -73,6 +77,8 @@ export function GroupBoundary({ children }: { children: ReactNode }) {
   if (entryToken) return <GroupEntry key={entryToken} token={entryToken} />;
   const groupId = new URLSearchParams(location.search).get("group");
   if (!groupId) return <GroupUnavailable />;
+  const pending = pendingEntry(groupId);
+  if (pending) return <GroupEntry key={pending} token={pending} />;
   return (
     <GroupSession key={groupId} groupId={groupId}>
       {children}
@@ -91,6 +97,7 @@ function GroupEntry({ token }: { token: string }) {
     retry: false,
   });
   function finishSession(group: Group) {
+    forgetPendingEntry(group.id);
     if (metadata.data?.access_role)
       rememberEntryToken(group.id, token, metadata.data.access_role);
     queryClient.setQueryData(groupKey(group.id), group);

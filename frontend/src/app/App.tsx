@@ -20,6 +20,7 @@ import { MovementPage } from "../features/groups/MovementPage";
 import { OptionsPage } from "../features/groups/OptionsPage";
 import { SettlementPage } from "../features/groups/SettlementPage";
 import { SharePage } from "../features/groups/SharePage";
+import { DomainMigrationGate } from "../features/migration/DomainMigrationGate";
 import { createQueryClient } from "../lib/query";
 
 const queryClient = createQueryClient();
@@ -71,59 +72,61 @@ function Shell() {
         </span>
       </header>
       <main id="main-content" className="app-main" tabIndex={-1}>
-        <Routes>
-          <Route path="/" element={<CreateGroup />} />
-          <Route path="/privacy" element={<PrivacyPage />} />
-          <Route
-            path="/g"
-            element={
-              <GroupBoundary>
-                <GroupPage />
-              </GroupBoundary>
-            }
-          />
-          <Route
-            path="/g/share"
-            element={
-              <GroupBoundary>
-                <SharePage />
-              </GroupBoundary>
-            }
-          />
-          <Route
-            path="/g/movements/new"
-            element={
-              <GroupBoundary>
-                <MovementPage />
-              </GroupBoundary>
-            }
-          />
-          <Route
-            path="/g/movements/:movementId"
-            element={
-              <GroupBoundary>
-                <MovementPage />
-              </GroupBoundary>
-            }
-          />
-          <Route
-            path="/g/options"
-            element={
-              <GroupBoundary>
-                <OptionsPage />
-              </GroupBoundary>
-            }
-          />
-          <Route
-            path="/g/settlement"
-            element={
-              <GroupBoundary>
-                <SettlementPage />
-              </GroupBoundary>
-            }
-          />
-          <Route path="*" element={<GroupUnavailable />} />
-        </Routes>
+        <DomainMigrationGate>
+          <Routes>
+            <Route path="/" element={<CreateGroup />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route
+              path="/g"
+              element={
+                <GroupBoundary>
+                  <GroupPage />
+                </GroupBoundary>
+              }
+            />
+            <Route
+              path="/g/share"
+              element={
+                <GroupBoundary>
+                  <SharePage />
+                </GroupBoundary>
+              }
+            />
+            <Route
+              path="/g/movements/new"
+              element={
+                <GroupBoundary>
+                  <MovementPage />
+                </GroupBoundary>
+              }
+            />
+            <Route
+              path="/g/movements/:movementId"
+              element={
+                <GroupBoundary>
+                  <MovementPage />
+                </GroupBoundary>
+              }
+            />
+            <Route
+              path="/g/options"
+              element={
+                <GroupBoundary>
+                  <OptionsPage />
+                </GroupBoundary>
+              }
+            />
+            <Route
+              path="/g/settlement"
+              element={
+                <GroupBoundary>
+                  <SettlementPage />
+                </GroupBoundary>
+              }
+            />
+            <Route path="*" element={<GroupUnavailable />} />
+          </Routes>
+        </DomainMigrationGate>
       </main>
       <footer className="site-footer">
         <p className="flex items-center gap-2">

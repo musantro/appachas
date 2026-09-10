@@ -85,6 +85,29 @@ export const api = {
   createGroup: (input: CreateGroupInput) =>
     request<CreateGroupResult>("/groups", undefined, "POST", input),
   group: (groupId: string) => request<Group>("/group", groupId),
+  migrationStart: (groupId: string) =>
+    request<JsonResponse<paths["/api/group/migration/start"]["post"]>>(
+      "/group/migration/start",
+      groupId,
+      "POST",
+      {},
+    ),
+  migrationAuthorize: (groupId: string, id: string) =>
+    request<JsonResponse<paths["/api/group/migration/authorize"]["post"]>>(
+      "/group/migration/authorize",
+      groupId,
+      "POST",
+      { id },
+    ),
+  migrationRedeem: (groupId: string, id: string, code: string) =>
+    request<void>("/group/migration/redeem", groupId, "POST", { id, code }),
+  migrationConfirm: (groupId: string, id: string) =>
+    request<JsonResponse<paths["/api/group/migration/confirm"]["post"]>>(
+      "/group/migration/confirm",
+      groupId,
+      "POST",
+      { id },
+    ),
   metadata: (entryToken: string) =>
     request<Metadata>(
       "/group/metadata",

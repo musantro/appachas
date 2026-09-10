@@ -6,8 +6,8 @@ The interface is in Spanish, works from 320 px upward, and follows
 [Mesa Clara](DESIGN.md).
 
 Production domain: **[appachas.es](https://appachas.es)**.
-The [previous domain](https://appachas.vercel.app) remains available for existing
-links and sessions. See [custom-domain setup](docs/custom-domain.md) for DNS,
+The [previous domain](https://appachas.vercel.app) transfers existing sessions
+and forwards old links to the new domain. See [custom-domain setup](docs/custom-domain.md) for DNS,
 activation and verification.
 
 React + TypeScript + Vite, FastAPI + Python 3.13, and PostgreSQL. Production runs
@@ -72,6 +72,11 @@ regression; HTTP acceptance verifies concurrency,
 permissions, exact cents and invalid inputs against the real API. Tests delete
 only their own groups. Browser traces and recordings are disabled because they
 can contain private group links. See the [acceptance matrix](docs/acceptance.md).
+
+CI additionally exercises domain migration in Chromium and WebKit with separate
+`127.0.0.1` and `localhost` cookie jars. To run those scenarios locally, use the
+[two-host test configuration](docs/custom-domain.md#local-two-host-acceptance).
+They are deliberately disabled when pointing acceptance at a remote deployment.
 
 The generated API schema is `backend/openapi.json`, and the frontend consumes
 `frontend/src/lib/api.generated.ts`. Regenerate both after contract changes;

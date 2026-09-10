@@ -4,7 +4,7 @@ from typing import Any
 from psycopg import Connection
 from psycopg.rows import dict_row
 
-from appachas.contexts.groups.shared.application.ports import Actor, Session
+from appachas.contexts.groups.shared.application.ports import Actor, Session, SessionMigration
 from appachas.contexts.groups.shared.domain.models import Allocation, Group, Member, Movement
 
 
@@ -121,6 +121,88 @@ class PostgresRepository:
                WHERE member_id=%s AND role='member' AND revoked_at IS NULL""",
             (revoked_at, member_id),
         )
+
+    def revoke_session(self, session_hash: str, revoked_at: datetime) -> None:
+        self.connection.execute(
+            "UPDATE appachas.sessions SET revoked_at=%s WHERE token_hash=%s AND revoked_at IS NULL",
+            (revoked_at, session_hash),
+        )
+
+    def get_migration(self, group_id: str, migration_id: str) -> SessionMigration | None:
+        row = self.connection.execute(
+            "SELECT * FROM appachas.session_migrations WHERE group_id=%s AND id=%s FOR UPDATE",
+            (group_id, migration_id),
+        ).fetchone()
+        if row is None:
+            return None
+        return SessionMigration(
+            str(row["id"]),
+            str(row["group_id"]),
+            row["source_origin"],
+            row["target_origin"],
+            row["binding_hash"],
+            row["created_at"],
+            row["expires_at"],
+            row["source_session_hash"],
+            str(row["member_id"]) if row["member_id"] is not None else None,
+            row["role"] == "creator" if row["role"] is not None else None,
+            row["code_hash"],
+            row["pending_session_hash"],
+            row["redeemed_at"],
+            row["confirmed_at"],
+        )
+
+    def save_migration(self, migration: SessionMigration) -> None:
+        self.connection.execute(
+            """INSERT INTO appachas.session_migrations
+               (id,group_id,source_origin,target_origin,binding_hash,created_at,expires_at,
+                source_session_hash,member_id,role,code_hash,pending_session_hash,
+                redeemed_at,confirmed_at)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+               ON CONFLICT (id) DO UPDATE SET source_session_hash=EXCLUDED.source_session_hash,
+                 member_id=EXCLUDED.member_id,role=EXCLUDED.role,code_hash=EXCLUDED.code_hash,
+                 pending_session_hash=EXCLUDED.pending_session_hash,
+                 redeemed_at=EXCLUDED.redeemed_at,confirmed_at=EXCLUDED.confirmed_at""",
+            (
+                migration.id,
+                migration.group_id,
+                migration.source_origin,
+                migration.target_origin,
+                migration.binding_hash,
+                migration.created_at,
+                migration.expires_at,
+                migration.source_session_hash,
+                migration.member_id,
+                None
+                if migration.is_creator is None
+                else "creator"
+                if migration.is_creator
+                else "member",
+                migration.code_hash,
+                migration.pending_session_hash,
+                migration.redeemed_at,
+                migration.confirmed_at,
+            ),
+        )
+
+    def purge_migrations(self, now: datetime, group_id: str | None = None) -> None:
+        # Skip rows another request holds, preserving the group→migration lock
+        # order even when the scheduled cleanup scans multiple groups.
+        self.connection.execute(
+            """DELETE FROM appachas.session_migrations WHERE id IN (
+                 SELECT id FROM appachas.session_migrations
+                 WHERE expires_at<=%s AND (%s::uuid IS NULL OR group_id=%s::uuid)
+                 FOR UPDATE SKIP LOCKED)""",
+            (now, group_id, group_id),
+        )
+
+    def count_migrations(self, group_id: str) -> int:
+        row = self.connection.execute(
+            "SELECT COUNT(*) AS total FROM appachas.session_migrations WHERE group_id=%s",
+            (group_id,),
+        ).fetchone()
+        assert row is not None
+        return row["total"]
 
     def create(self, group: Group, creator_hash: str, member_hash: str) -> None:
         self.connection.execute(

@@ -20,6 +20,12 @@ from appachas.contexts.groups.movement_management.application.handlers import (
     DeleteMovementHandler,
     EditMovementHandler,
 )
+from appachas.contexts.groups.session_migration.application.handlers import (
+    AuthorizeMigrationHandler,
+    ConfirmMigrationHandler,
+    RedeemMigrationHandler,
+    StartMigrationHandler,
+)
 from appachas.contexts.groups.settlement.application.handlers import (
     ReadGroupHandler,
     ReadMetadataHandler,
@@ -46,6 +52,34 @@ class Container(containers.DeclarativeContainer):
     create_group = providers.Factory(CreateGroupHandler, clock=clock, tokens=tokens)
     claim_identity = providers.Factory(ClaimIdentityHandler, clock=clock, tokens=tokens)
     start_session = providers.Factory(StartSessionHandler, clock=clock, tokens=tokens)
+    start_migration = providers.Factory(
+        StartMigrationHandler,
+        clock=clock,
+        tokens=tokens,
+        source_origin=settings.provided.migration_source_origin,
+        target_origin=settings.provided.migration_target_origin,
+    )
+    authorize_migration = providers.Factory(
+        AuthorizeMigrationHandler,
+        clock=clock,
+        tokens=tokens,
+        source_origin=settings.provided.migration_source_origin,
+        target_origin=settings.provided.migration_target_origin,
+    )
+    redeem_migration = providers.Factory(
+        RedeemMigrationHandler,
+        clock=clock,
+        tokens=tokens,
+        source_origin=settings.provided.migration_source_origin,
+        target_origin=settings.provided.migration_target_origin,
+    )
+    confirm_migration = providers.Factory(
+        ConfirmMigrationHandler,
+        clock=clock,
+        tokens=tokens,
+        source_origin=settings.provided.migration_source_origin,
+        target_origin=settings.provided.migration_target_origin,
+    )
     add_member = providers.Factory(AddMemberHandler, clock=clock, tokens=tokens)
     rename_member = providers.Factory(RenameMemberHandler, clock=clock)
     release_member = providers.Factory(ReleaseMemberHandler, clock=clock)

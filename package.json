@@ -5,6 +5,7 @@
   "engines": { "node": ">=22 <27" },
   "scripts": {
     "build": "npm --prefix frontend ci && npm --prefix frontend run build",
+    "build:test-domains": "npm --prefix frontend ci && npm --prefix frontend run build -- --mode migration-test",
     "build:production": "node scripts/build-production.mjs",
     "pull:production": "node scripts/pull-production.mjs",
     "deploy:production": "node scripts/deploy-production.mjs",

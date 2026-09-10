@@ -1,9 +1,10 @@
 from copy import deepcopy
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from appachas.contexts.groups.shared.application.ports import Actor, Session
+from appachas.contexts.groups.shared.application.ports import Actor, Session, SessionMigration
 from appachas.contexts.groups.shared.domain.models import Group, Member
 
 
@@ -54,6 +55,7 @@ class MemoryRepository:
         self.group: Group | None = group
         self.commits = 0
         self.rollbacks = 0
+        self.migrations: dict[str, SessionMigration] = {}
         self.sessions = {
             m.session_hash: Session(m.session_hash, group.id, m.id, False, group.created_at)
             for m in group.members
@@ -84,11 +86,30 @@ class MemoryRepository:
         self.sessions[session.token_hash] = session
 
     def revoke_member_sessions(self, member_id: str, revoked_at: datetime):
-        from dataclasses import replace
-
         for key, session in list(self.sessions.items()):
             if session.member_id == member_id and not session.is_creator and not session.revoked_at:
                 self.sessions[key] = replace(session, revoked_at=revoked_at)
+
+    def revoke_session(self, session_hash: str, revoked_at: datetime):
+        session = self.sessions[session_hash]
+        self.sessions[session_hash] = replace(session, revoked_at=revoked_at)
+
+    def get_migration(self, group_id: str, migration_id: str):
+        migration = self.migrations.get(migration_id)
+        return migration if migration and migration.group_id == group_id else None
+
+    def save_migration(self, migration: SessionMigration):
+        self.migrations[migration.id] = migration
+
+    def purge_migrations(self, now: datetime, group_id: str | None = None):
+        self.migrations = {
+            key: migration
+            for key, migration in self.migrations.items()
+            if migration.expires_at > now or group_id not in (None, migration.group_id)
+        }
+
+    def count_migrations(self, group_id: str):
+        return sum(m.group_id == group_id for m in self.migrations.values())
 
     def save_group(self, group: Group):
         self.group = group
@@ -102,6 +123,7 @@ class MemoryRepository:
         assert self.group
         self.group.members = [m for m in self.group.members if m.id != member_id]
         self.sessions = {key: s for key, s in self.sessions.items() if s.member_id != member_id}
+        self.migrations = {key: m for key, m in self.migrations.items() if m.member_id != member_id}
 
     def save_movement(self, group_id: str, movement):
         assert self.group
@@ -114,6 +136,7 @@ class MemoryRepository:
     def delete_group(self, group_id: str):
         self.group = None
         self.sessions = {}
+        self.migrations = {}
 
     def expiry_candidates(self):
         return [self.group] if self.group else []
@@ -129,12 +152,14 @@ class MemoryUnitOfWork:
     def __enter__(self):
         self.snapshot = deepcopy(self.repository.group)
         self.session_snapshot = deepcopy(self.repository.sessions)
+        self.migration_snapshot = deepcopy(self.repository.migrations)
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type:
             self.repository.group = self.snapshot
             self.repository.sessions = self.session_snapshot
+            self.repository.migrations = self.migration_snapshot
             self.repository.rollbacks += 1
         else:
             self.repository.commits += 1
