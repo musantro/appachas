@@ -128,6 +128,12 @@
     color: var(--color-muted);
     opacity: 1;
   }
+  input[type="date"] {
+    appearance: none;
+    display: block;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
   input[type="checkbox"],
   input[type="radio"] {
     width: 20px;
@@ -403,7 +409,7 @@
   }
   .form-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 14em), 1fr));
     gap: 16px;
   }
   .field {
@@ -755,14 +761,15 @@
     color: var(--color-muted);
   }
   .type-selector {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 8px;
   }
   .type-option {
+    flex: 1 1 max-content;
     min-width: 0;
     text-align: center;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
     min-height: 48px;
     border-radius: 8px;
     padding: 12px 8px;
@@ -1007,6 +1014,7 @@
   .site-header {
     padding: 16px;
     min-height: 80px;
+    flex-wrap: wrap;
   }
   .header-note {
     font-size: 12px;
@@ -1140,10 +1148,6 @@
   }
   .card {
     padding: 16px;
-  }
-  .type-option {
-    flex-direction: column;
-    gap: 6px;
   }
   .group-tabs a {
     flex-direction: column;

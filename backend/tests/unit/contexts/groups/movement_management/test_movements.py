@@ -1,14 +1,22 @@
+from copy import deepcopy
 from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
 
+from appachas.contexts.groups.member_management.application.handlers import AddMemberHandler
+from appachas.contexts.groups.movement_management.application.handlers import (
+    AddMovementHandler,
+    EditMovementHandler,
+)
 from appachas.contexts.groups.movement_management.domain.rules import (
     MovementInput,
     build_movement,
 )
+from appachas.contexts.groups.settlement.domain.calculation import calculate
+from appachas.contexts.groups.shared.application.ports import Access
 from appachas.contexts.groups.shared.domain.errors import InvalidInput
-from tests.mothers import FrozenClock, GroupMother
+from tests.mothers import FakeTokens, FrozenClock, GroupMother, MemoryRepository
 
 
 def movement_input(group, **changes):
@@ -56,6 +64,7 @@ def test_positive_split_preserves_total_and_join_order(kind, amount):
         ({"participant_ids": []}, "invalid_participants"),
         ({"date": date(2026, 9, 11)}, "invalid_movement_date"),
         ({"payer_id": "not-in-group"}, "member_not_found"),
+        ({"participant_ids": ["not-in-group"]}, "member_not_found"),
     ],
 )
 def test_invalid_movement_is_rejected(changes, code):
@@ -168,30 +177,65 @@ def test_invalid_contribution_is_rejected(problem):
     )
 
 
-def test_late_joined_member_cannot_be_added_to_historical_movement():
+@pytest.mark.parametrize(
+    "kind,role,expected",
+    [
+        ("expense", "payer", [0, -1001, 1001]),
+        ("expense", "participant", [1001, -501, -500]),
+        ("refund", "payer", [0, 1001, -1001]),
+        ("refund", "participant", [-1001, 501, 500]),
+        ("contribution", "payer", [0, -1001, 1001]),
+        ("contribution", "participant", [1001, -400, -601]),
+    ],
+)
+def test_late_joined_member_changes_history_only_when_explicitly_editing(kind, role, expected):
     # Arrange / Given
-    group = GroupMother.with_members()
-    now = FrozenClock().now()
-    previous = build_movement(
+    group = GroupMother.with_members("Ana", "Bruno")
+    clock = FrozenClock()
+    repository = MemoryRepository(group)
+    tokens = FakeTokens()
+    access = Access("creator")
+    data = movement_input(
         group,
-        movement_input(group, participant_ids=[group.members[0].id]),
-        today=now.date(),
-        now=now,
-        identifier="historical",
+        type=kind,
+        amount_cents=1001,
+        participant_ids=[group.members[1].id],
     )
-    group.members[2].joined_at = now + timedelta(hours=1)
+    previous = AddMovementHandler(repository.unit_of_work, clock, tokens).handle(access, data)
+    historical = deepcopy(previous)
+    old_balances = [balance.amount_cents for balance in calculate(group).balances]
+    clock.value += timedelta(hours=1)
+    added = AddMemberHandler(repository.unit_of_work, clock, tokens).handle(access, "Carla")
+    assert added.joined_at is not None and added.joined_at > previous.created_at
+    assert group.movements == [historical]
+    assert [balance.amount_cents for balance in calculate(group).balances] == [*old_balances, 0]
+    if role == "payer":
+        data = replace(data, payer_id=added.id)
+    else:
+        data = replace(data, participant_ids=[added.id, group.members[1].id])
+        if kind == "contribution":
+            data = replace(data, allocations=[(added.id, 601), (group.members[1].id, 400)])
+    previous_group_version = group.version
+    clock.value += timedelta(hours=1)
+
     # Act / When
-    with pytest.raises(InvalidInput) as error:
-        build_movement(
-            group,
-            movement_input(group),
-            today=now.date(),
-            now=now + timedelta(hours=2),
-            identifier=previous.id,
-            previous=previous,
-        )
+    result = EditMovementHandler(repository.unit_of_work, clock).handle(
+        access, previous.id, data, previous.version
+    )
+
     # Assert / Then
-    assert error.value.code == "member_joined_after_movement"
+    assert result.id == previous.id
+    assert result.created_at == previous.created_at
+    assert result.updated_at == clock.now()
+    assert result.date == previous.date
+    assert result.version == previous.version + 1
+    assert group.version == previous_group_version + 1
+    assert previous == historical
+    assert group.movements == [result]
+    assert sum(allocation.amount_cents for allocation in result.allocations) == 1001
+    balances = [balance.amount_cents for balance in calculate(group).balances]
+    assert balances == expected
+    assert sum(balances) == 0
 
 
 @pytest.mark.parametrize("amount", [0, -1, 0.5, True, "100", 1000000000000])

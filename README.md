@@ -61,13 +61,14 @@ npm run test:unit
 npm run generate:api
 npm run test:integration
 npm run build
-npx playwright install chromium
+npx playwright install --with-deps chromium webkit
 npm run test:e2e
 ```
 
 Integration and acceptance require the migrated local PostgreSQL database.
 Playwright starts FastAPI and the built frontend preview automatically. The
-browser suite uses mobile Chromium; HTTP acceptance verifies concurrency,
+browser suite uses mobile Chromium and a focused WebKit movement-form layout
+regression; HTTP acceptance verifies concurrency,
 permissions, exact cents and invalid inputs against the real API. Tests delete
 only their own groups. Browser traces and recordings are disabled because they
 can contain private group links. See the [acceptance matrix](docs/acceptance.md).
@@ -80,8 +81,9 @@ the pipeline rejects uncommitted generated changes.
 
 [GitHub Actions](.github/workflows/ci.yml) checks formatting, linting, Python and
 TypeScript types, unit tests, component tests and architectural dependencies.
-On `master`, it also migrates an isolated PostgreSQL 17 service and runs all
-integration and browser acceptance tests. Only then does it migrate production,
+On pull requests and `master`, it also migrates an isolated PostgreSQL 17 service
+and runs all integration and browser acceptance tests. Only `master`, after
+these checks pass, can migrate production,
 deploy the tested source to Vercel, and verify the published API and static app.
 
 `npm run build:production` builds from an explicit allowlist in an isolated

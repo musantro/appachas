@@ -226,6 +226,12 @@ transacción, conserva `created_at` y recalcula desde cero. Eliminarlo elimina
 también sus asignaciones y recalcula desde los movimientos restantes. El orden
 del historial no entra en el cálculo.
 
+Dar de alta a un integrante no modifica las asignaciones existentes. La fecha
+de alta no limita su participación: al editar cualquier movimiento anterior se
+le puede incluir como pagador/origen o participante/receptor. Esa edición
+reemplaza el reparto y recalcula los balances con las mismas reglas de céntimos,
+conservando `created_at` y aumentando la versión del movimiento.
+
 ## 4. Invariantes que deben cumplirse antes de calcular
 
 Estas condiciones se validan en la frontera de dominio y se vuelven a proteger
@@ -380,7 +386,8 @@ grupo ni reinician su caducidad.
 | Aportación a varios | Bruno aporta `1000` a Ana y Carlos, `600/400` | Bruno `+1000`, Ana `-600`, Carlos `-400` |
 | Aportación excesiva | Aporta más que su deuda actual | Se acepta y se conserva el excedente |
 | Sin movimientos | Grupo nuevo | Todos los balances `0`, sin transferencias |
-| Nuevo integrante | Alta después de movimientos | Saldo `0`, sin asignaciones históricas |
+| Nuevo integrante | Alta después de movimientos | Saldo `0`, sin cambios automáticos en las asignaciones existentes |
+| Integrante nuevo en movimiento anterior | Editar un movimiento e incluirlo como pagador/origen o participante/receptor | Edición válida, reparto y balances recalculados, `created_at` intacto |
 | Edición | Cambiar importe, tipo o participantes | Recalculo completo y `created_at` intacto |
 | Borrado | Eliminar un movimiento | Se eliminan sus asignaciones y se recalcula |
 | Total neto negativo | Reembolsos mayores que gastos | Se conserva `totalNetCents` negativo y se liquida |

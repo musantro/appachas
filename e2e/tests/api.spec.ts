@@ -153,53 +153,139 @@ test("a one-cent contribution to two recipients retains the zero-cent remainder"
   expect((await created.creator.read()).total_cents).toBe(0);
 });
 
-test("a later member can join new movements but cannot be added to an old movement by editing", async ({
-  groups,
-}) => {
-  // Arrange / Given
-  const created = await groups.create();
-  const original: Movement = await created.creator.write(
-    "POST",
-    "/movements",
-    expenseInput(created.group),
-  );
-  await created.creator.write("POST", "/members", { alias: "David" });
-  const state = await created.creator.read();
-  const david = state.members[3];
+for (const type of ["expense", "refund", "contribution"] as const) {
+  test(`a later member starts without history and can explicitly join an old ${type} as participant and payer`, async ({
+    groups,
+  }) => {
+    // Arrange / Given
+    const created = await groups.create({ members: ["Ana", "Bruno"] });
+    const [ana, bruno] = created.group.members;
+    const input = expenseInput(created.group, {
+      type,
+      amount: "12.00",
+      date: calendarDate(-1),
+      participant_ids:
+        type === "contribution" ? [bruno.id] : [ana.id, bruno.id],
+      ...(type === "contribution"
+        ? { allocations: [{ member_id: bruno.id, amount: "12.00" }] }
+        : {}),
+    });
+    const original: Movement = await created.creator.write(
+      "POST",
+      "/movements",
+      input,
+    );
+    const before = await created.creator.read();
+    await created.creator.write("POST", "/members", { alias: "David" });
+    const added = await created.creator.read();
+    const david = added.members[2];
 
-  // Act / When
-  const response = await created.creator.response(
-    "PUT",
-    `/movements/${original.id}`,
-    expenseInput(state, { version: original.version }),
-  );
+    // Adding someone alone must never rewrite history or introduce a balance.
+    expect(added.movements).toEqual(before.movements);
+    expect(added.total_cents).toBe(before.total_cents);
+    expect(added.balances.map((balance) => balance.amount_cents)).toEqual([
+      ...before.balances.map((balance) => balance.amount_cents),
+      0,
+    ]);
 
-  // Assert / Then
-  await rejected(response, 422);
-  await rejected(
-    await created.creator.response(
+    // Act / When: an explicit edit adds the new member to the old split.
+    const edited: Movement = await created.creator.write(
       "PUT",
       `/movements/${original.id}`,
-      expenseInput(created.group, {
-        payer_id: david.id,
+      {
+        ...input,
         version: original.version,
-      }),
-    ),
-    422,
-  );
-  expect((await created.creator.read()).movements[0].allocations).toEqual(
-    original.allocations,
-  );
-  const newer: Movement = await created.creator.write(
-    "POST",
-    "/movements",
-    expenseInput(state, { payer_id: david.id }),
-  );
-  expect(newer.payer_id).toBe(david.id);
-  expect(newer.allocations.some((item) => item.member_id === david.id)).toBe(
-    true,
-  );
-});
+        participant_ids:
+          type === "contribution"
+            ? [bruno.id, david.id]
+            : [ana.id, bruno.id, david.id],
+        ...(type === "contribution"
+          ? {
+              allocations: [
+                { member_id: bruno.id, amount: "6.00" },
+                { member_id: david.id, amount: "6.00" },
+              ],
+            }
+          : {}),
+      },
+    );
+
+    // Assert / Then
+    expect(edited.version).toBe(original.version + 1);
+    expect(Date.parse(edited.created_at)).toBe(Date.parse(original.created_at));
+    expect(edited.date).toBe(original.date);
+    expect(
+      edited.allocations.map((allocation) => allocation.amount_cents),
+    ).toEqual(
+      type === "contribution"
+        ? [600, 600]
+        : type === "refund"
+          ? [-400, -400, -400]
+          : [400, 400, 400],
+    );
+    const participating = await created.creator.read();
+    expect(participating.version).toBeGreaterThan(added.version);
+    expect(
+      participating.balances.map((balance) => balance.amount_cents),
+    ).toEqual(
+      type === "contribution"
+        ? [1200, -600, -600]
+        : type === "refund"
+          ? [-800, 400, 400]
+          : [800, -400, -400],
+    );
+
+    // The new member can also be the payer/source of that same old movement.
+    const payerInput = {
+      ...input,
+      version: edited.version,
+      payer_id: david.id,
+      participant_ids: [ana.id, bruno.id],
+      ...(type === "contribution"
+        ? {
+            allocations: [
+              { member_id: ana.id, amount: "5.00" },
+              { member_id: bruno.id, amount: "7.00" },
+            ],
+          }
+        : {}),
+    };
+    const repaid: Movement = await created.creator.write(
+      "PUT",
+      `/movements/${original.id}`,
+      payerInput,
+    );
+    expect(repaid.payer_id).toBe(david.id);
+    expect(repaid.version).toBe(edited.version + 1);
+    expect(Date.parse(repaid.created_at)).toBe(Date.parse(original.created_at));
+    expect(repaid.date).toBe(original.date);
+    const final = await created.creator.read();
+    expect(final.total_cents).toBe(before.total_cents);
+    expect(final.balances.map((balance) => balance.amount_cents)).toEqual(
+      type === "contribution"
+        ? [-500, -700, 1200]
+        : type === "refund"
+          ? [600, 600, -1200]
+          : [-600, -600, 1200],
+    );
+    expect(
+      final.balances.reduce(
+        (total, balance) => total + balance.amount_cents,
+        0,
+      ),
+    ).toBe(0);
+    await rejected(
+      await created.creator.response(
+        "PUT",
+        `/movements/${original.id}`,
+        payerInput,
+      ),
+      409,
+      "stale_version",
+    );
+    expect((await created.creator.read()).movements).toEqual(final.movements);
+  });
+}
 
 test("closing a stale settlement is rejected when another member adds a movement", async ({
   groups,
