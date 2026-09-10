@@ -8,6 +8,7 @@ from appachas.contexts.groups.group_creation.public import CreateGroup
 from appachas.contexts.groups.identity_claim.public import ClaimIdentity
 from appachas.contexts.groups.movement_management.public import MovementInput
 from appachas.contexts.groups.settlement.public import calculate
+from appachas.contexts.groups.shared.application.ports import Access
 from appachas.contexts.groups.shared.domain.errors import Forbidden
 from appachas.contexts.groups.shared.infrastructure.http.amounts import parse_amount
 from appachas.contexts.groups.shared.infrastructure.http.dependencies import (
@@ -17,6 +18,8 @@ from appachas.contexts.groups.shared.infrastructure.http.dependencies import (
     connection,
     cookie_name,
     handler,
+    migration_access,
+    migration_cookie_name,
 )
 from appachas.contexts.groups.shared.infrastructure.http.models import (
     AddMemberRequest,
@@ -31,6 +34,11 @@ from appachas.contexts.groups.shared.infrastructure.http.models import (
     HealthResponse,
     MemberResponse,
     MetadataResponse,
+    MigrationAuthorizeResponse,
+    MigrationIdRequest,
+    MigrationRedeemRequest,
+    MigrationStartRequest,
+    MigrationStartResponse,
     MovementRequest,
     MovementResponse,
     Problem,
@@ -38,6 +46,11 @@ from appachas.contexts.groups.shared.infrastructure.http.models import (
     SettlementResponse,
     VersionRequest,
 )
+from appachas.infrastructure.bootstrap.adapters import token_hash
+
+MigrationSourceAccess = Annotated[Access, Depends(migration_access(source=True))]
+MigrationTargetAccess = Annotated[Access, Depends(migration_access())]
+MIGRATION_COOKIE_PATH = "/api/group/migration"
 
 router = APIRouter(responses={code: {"model": Problem} for code in (403, 404, 409, 422, 429, 500)})
 
@@ -149,6 +162,81 @@ def start_session(
         set_session_cookie(response, request, result.group.id, result.session_token)
     return ClaimResponse(
         group=group_response(result.group, result.member_id, result.is_creator, operation.clock)
+    )
+
+
+@router.post("/api/group/migration/start", response_model=MigrationStartResponse)
+def start_migration(
+    body: MigrationStartRequest,
+    access: MigrationTargetAccess,
+    request: Request,
+    response: Response,
+    operation=Depends(handler("start_migration")),
+):
+    result = operation.handle(access)
+    response.set_cookie(
+        migration_cookie_name(result.id),
+        result.binding_token,
+        max_age=120,
+        httponly=True,
+        secure=request.app.state.container.settings().cookie_secure,
+        samesite="strict",
+        path=MIGRATION_COOKIE_PATH,
+    )
+    return MigrationStartResponse(id=result.id)
+
+
+@router.post("/api/group/migration/authorize", response_model=MigrationAuthorizeResponse)
+def authorize_migration(
+    body: MigrationIdRequest,
+    access: MigrationSourceAccess,
+    operation=Depends(handler("authorize_migration")),
+):
+    return MigrationAuthorizeResponse(code=operation.handle(access, str(body.id)))
+
+
+def migration_binding(request: Request, migration_id: str) -> str | None:
+    raw = request.cookies.get(migration_cookie_name(migration_id))
+    return token_hash(raw) if raw else None
+
+
+@router.post("/api/group/migration/redeem", status_code=204)
+def redeem_migration(
+    body: MigrationRedeemRequest,
+    access: MigrationTargetAccess,
+    request: Request,
+    response: Response,
+    operation=Depends(handler("redeem_migration")),
+):
+    migration_id = str(body.id)
+    raw = operation.handle(
+        access, migration_id, migration_binding(request, migration_id), token_hash(body.code)
+    )
+    assert access.group_id is not None
+    set_session_cookie(response, request, access.group_id, raw)
+
+
+@router.post("/api/group/migration/confirm", response_model=ClaimResponse)
+def confirm_migration(
+    body: MigrationIdRequest,
+    access: MigrationTargetAccess,
+    request: Request,
+    response: Response,
+    operation=Depends(handler("confirm_migration")),
+):
+    migration_id = str(body.id)
+    result = operation.handle(access, migration_id, migration_binding(request, migration_id))
+    response.delete_cookie(
+        migration_cookie_name(migration_id),
+        httponly=True,
+        secure=request.app.state.container.settings().cookie_secure,
+        samesite="strict",
+        path=MIGRATION_COOKIE_PATH,
+    )
+    return ClaimResponse(
+        group=group_response(
+            result.group, result.actor.member_id, result.actor.is_creator, operation.clock
+        )
     )
 
 

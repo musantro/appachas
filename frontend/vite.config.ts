@@ -5,8 +5,12 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: { outDir: "../public", emptyOutDir: true },
-  server: { proxy: { "/api": "http://127.0.0.1:8000" } },
-  preview: { proxy: { "/api": "http://127.0.0.1:8000" } },
+  server: {
+    proxy: { "/api": { target: "http://127.0.0.1:8000", changeOrigin: false } },
+  },
+  preview: {
+    proxy: { "/api": { target: "http://127.0.0.1:8000", changeOrigin: false } },
+  },
   test: {
     environment: "jsdom",
     setupFiles: ["./tests/setup.ts"],

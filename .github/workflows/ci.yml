@@ -59,6 +59,10 @@ jobs:
       COOKIE_SECURE: 'false'
       APP_ENV: test
       CRON_SECRET: acceptance-only-cron-secret
+      MIGRATION_SOURCE_ORIGIN: http://127.0.0.1:4173
+      MIGRATION_TARGET_ORIGIN: http://localhost:4173
+      VITE_MIGRATION_SOURCE_ORIGIN: http://127.0.0.1:4173
+      VITE_MIGRATION_TARGET_ORIGIN: http://localhost:4173
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -77,7 +81,7 @@ jobs:
       - run: uv sync --project backend --frozen
       - run: npm run db:migrate
       - run: npm run test:integration
-      - run: npm run build
+      - run: npm run build:test-domains
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
 
@@ -87,7 +91,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://appachas.vercel.app
+      url: https://appachas.es
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -113,5 +117,7 @@ jobs:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
       - name: Deploy the verified build
         run: npm run deploy:production
-      - name: Verify production API and static application
+      - name: Verify custom domain, API, static application and www redirect
+        run: node scripts/smoke-production.mjs
+      - name: Verify the previous domain serves the session migration bridge
         run: node scripts/smoke-production.mjs https://appachas.vercel.app

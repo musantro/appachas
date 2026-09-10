@@ -9,13 +9,35 @@ from psycopg import Connection
 from psycopg_pool import ConnectionPool
 
 from appachas.contexts.groups.shared.application.ports import Access
-from appachas.contexts.groups.shared.domain.errors import Unavailable
+from appachas.contexts.groups.shared.domain.errors import Forbidden, Unavailable
 from appachas.infrastructure.bootstrap.adapters import token_hash
 from appachas.infrastructure.bootstrap.container import Container
 
 
 def cookie_name(group_id: str) -> str:
     return "appachas_" + group_id
+
+
+def migration_cookie_name(migration_id: str) -> str:
+    return "appachas_migration_binding_" + migration_id
+
+
+def migration_access(source: bool = False):
+    def resolve(request: Request) -> Access:
+        settings = request.app.state.container.settings()
+        expected = settings.migration_source_origin if source else settings.migration_target_origin
+        # Unlike the generic CSRF policy, migration is restricted to its exact
+        # host and phase. Neither Referer nor forwarded host can widen trust.
+        if (
+            request.headers.get("origin") != expected
+            or str(request.base_url).rstrip("/") != expected
+        ):
+            raise Forbidden(
+                "migration_origin_forbidden", "El dominio de este traslado no está permitido."
+            )
+        return access_context(request)
+
+    return resolve
 
 
 def bearer_token(request: Request) -> str:

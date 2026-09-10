@@ -66,4 +66,5 @@ class ExpireGroupsHandler(Handler):
                 if group.expired(self.clock.today(group.timezone)):
                     uow.repository.delete_group(group.id)
                     removed += 1
+            uow.repository.purge_migrations(self.clock.now())
         return removed

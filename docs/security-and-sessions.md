@@ -94,6 +94,37 @@ causa.
 
 ## Protección de peticiones
 
+### Cambio de dominio
+
+Los enlaces antiguos de `appachas.vercel.app` llevan a `appachas.es` sin
+compartir cookies entre dominios. El navegador comprueba primero la sesión del
+destino y la conserva si existe. Si no existe, realiza cuatro peticiones POST
+a `/api/group/migration/{start,authorize,redeem,confirm}` usando únicamente
+cookies y el UUID público del grupo, nunca el enlace como prueba de identidad.
+
+El destino inicia una solicitud ligada a una cookie HttpOnly de ese navegador;
+el origen autoriza con su sesión vigente y entrega un código aleatorio de un
+solo uso. Ambos caducan a los dos minutos. El canje requiere código y cookie de
+vinculación, e instala la cookie de sesión de destino todavía inactiva. La
+confirmación debe presentar esa cookie antes de activar la sesión y revocar
+atómicamente la del origen. Así, una interrupción antes de confirmar no revoca
+la sesión original, y perder la respuesta de confirmación no pierde la cookie
+ya recibida. Se conservan integrante y permisos, sin reclamar identidades de
+nuevo ni revocar otras sesiones independientes del creador.
+
+Cada fase valida exactamente el origen y host configurados. No se admiten
+destinos arbitrarios, códigos en la query, sustitución de sesiones activas del
+destino ni canjes desde otro navegador. La base de datos almacena solo hashes
+de credenciales. Los fragmentos transitorios se eliminan mediante reemplazo de
+historial y no se guardan en WebStorage ni `history.state`.
+
+Una visita posterior a un enlace antiguo usa directamente la sesión del
+destino. La transferencia es independiente por grupo y no recupera cookies
+borradas: una cookie original ya revocada no permite reconstruir una sesión
+de destino perdida. Se mantiene el procedimiento normal de recuperación.
+
+### Reglas generales
+
 - Las operaciones que cambian estado validan `Origin` o `Referer` según la
   política de mismo origen documentada en la arquitectura.
 - El servidor envía una política `Referrer-Policy` que evita reenviar enlaces

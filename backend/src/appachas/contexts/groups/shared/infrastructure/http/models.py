@@ -1,6 +1,7 @@
 from dataclasses import asdict
 from datetime import date, datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,6 +24,18 @@ class CreateGroupRequest(RequestModel):
 class ClaimRequest(RequestModel):
     member_id: str = Field(max_length=36)
     alias: str | None = Field(default=None, max_length=100)
+
+
+class MigrationStartRequest(RequestModel):
+    pass
+
+
+class MigrationIdRequest(RequestModel):
+    id: UUID
+
+
+class MigrationRedeemRequest(MigrationIdRequest):
+    code: str = Field(min_length=40, max_length=256, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class AddMemberRequest(RequestModel):
@@ -170,6 +183,14 @@ class CreateGroupResponse(ResponseModel):
 
 class ClaimResponse(ResponseModel):
     group: GroupResponse
+
+
+class MigrationStartResponse(ResponseModel):
+    id: UUID
+
+
+class MigrationAuthorizeResponse(ResponseModel):
+    code: str
 
 
 class Problem(ResponseModel):

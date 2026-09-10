@@ -99,6 +99,24 @@ than replace, the moderated usability study described in `MVP.md`.
 | US-65 | Mobile observes no third-party network requests or analytics; only first-party session cookies are permitted by the user's explicit persistence decision. |
 | US-66 | Mobile runs axe and 44 px touch-target checks on six primary screens at 320 px, then verifies 200% text enlargement on each screen with maximum-length names, concepts and technical amounts. Movement form regressions also check unbroken type labels and contained amount/date fields at narrow widths. The creation form checks keyboard focus and activation. |
 
+## Custom-domain session migration
+
+`domain-migration.spec.ts` runs against two explicitly configured local hosts,
+using real host-isolated cookies and the same PostgreSQL-backed API. CI enables
+this configuration; see [local setup](custom-domain.md#local-two-host-acceptance).
+It never attempts a migration against a remote deployment.
+
+Chromium and WebKit exercise member and creator transfer, clean bookmarks and
+secret entry links, reloads, repeated old links, independent groups, an already
+occupied destination and cleared-cookie recovery without reclaiming another
+identity. A confirmation-response loss test lets the real API commit before
+aborting the response, then checks that the browser can still enter the group.
+HTTP cases cover browser binding, replay, an interrupted transfer keeping the
+source valid, and refusing to replace an active destination session. Browser
+checks reject secrets in request URLs, referrers and persistent browser storage.
+Backend unit and PostgreSQL integration tests separately exercise expiry,
+concurrent handoffs, revocation, transaction rollback and role preservation.
+
 Acceptance is complete only when the referenced tests pass against the built
 application. This matrix describes test responsibility; it is not a substitute
 for execution results from the deployment pipeline.
