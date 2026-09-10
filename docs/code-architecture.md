@@ -42,19 +42,22 @@ with local synonyms in code.
 
 ### Serving the frontend
 
-Production uses one container. The container builds the Vite frontend and copies
-its static output into the FastAPI runtime image. FastAPI serves the API under
-`/api` and serves the frontend build with `app.frontend()`.
+Production uses Vercel's native Python runtime. Vercel loads the FastAPI
+application as a Python Function, while the root build command builds the Vite
+frontend and writes its static output to `public/`. Vercel serves `public/`
+through its CDN and FastAPI owns the `/api` routes; the FastAPI application does
+not mount or serve the frontend in production.
 
-Normal FastAPI path operations take priority over frontend files. Browser
-navigation falls back to the frontend entry point so client-side routing works;
-static asset requests still return `404` when the asset does not exist. FastAPI
-serves already-built static files and does not perform server-side rendering.
-See the [FastAPI frontend documentation](https://fastapi.tiangolo.com/tutorial/frontend/).
+The Vercel entrypoint is configured in `pyproject.toml` with
+`tool.vercel.entrypoint`. The deployment must keep the application stateless:
+sessions, data and scheduled expiry work use external services such as
+PostgreSQL and a scheduler or Vercel Cron.
 
-Local development runs Vite separately with a proxy from `/api` to FastAPI. The
-production topology remains a single container even though local development
-uses two processes.
+Local development runs Vite separately with a proxy from `/api` to FastAPI.
+`vercel dev` can run the same Vercel project locally when a Vercel-compatible
+preview is useful. Local and production use the same FastAPI entrypoint and
+frontend build command, but Vercel serves the production static files from its
+CDN rather than through FastAPI.
 
 ## Repository structure
 
@@ -614,8 +617,8 @@ environment, applies Alembic migrations, and runs:
 
 - backend infrastructure integration tests against ephemeral PostgreSQL;
 - Playwright acceptance tests against the complete built application;
-- a production-style check that FastAPI serves both `/api` and the frontend
-  build from the same container.
+- a production-style check that the deployed project serves `/api` through
+  FastAPI and the frontend build through Vercel's static output.
 
 Integration and acceptance failures block deployment. They are not required for
 the fast pull-request feedback loop because they require external processes and

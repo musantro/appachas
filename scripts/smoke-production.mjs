@@ -1,0 +1,14 @@
+const origin = new URL(process.argv[2] || 'https://appachas.vercel.app');
+const index = await fetch(origin, { redirect: 'error' });
+if (!index.ok || !index.headers.get('content-type')?.includes('text/html')) throw new Error('Production frontend is unavailable');
+const html = await index.text();
+if (!html.includes('Appachas') || !html.includes('id="root"')) throw new Error('Unexpected production frontend');
+const asset = html.match(/src="([^"]+\.js)"/);
+if (!asset || !(await fetch(new URL(asset[1], origin))).ok) throw new Error('Production JavaScript asset is unavailable');
+const health = await fetch(new URL('/api/health', origin));
+if (!health.ok || !health.headers.get('content-type')?.includes('application/json')) throw new Error('Production API is unavailable');
+const route = await fetch(new URL('/g/options', origin));
+if (!route.ok || !route.headers.get('content-type')?.includes('text/html')) throw new Error('Production client routing is unavailable');
+const missing = await fetch(new URL('/api/not-a-route', origin));
+if (missing.status !== 404) throw new Error('Unknown API routes must remain 404');
+console.log(`Production frontend, static assets, client routing and FastAPI verified at ${origin.origin}`);

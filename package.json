@@ -1,0 +1,25 @@
+{
+  "name": "appachas",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22 <27" },
+  "scripts": {
+    "build": "npm --prefix frontend ci && npm --prefix frontend run build",
+    "build:production": "node scripts/build-production.mjs",
+    "deploy:production": "node scripts/deploy-production.mjs",
+    "dev": "node scripts/dev.mjs",
+    "db:start": "node scripts/local-db.mjs",
+    "db:migrate": "uv run --project backend alembic -c backend/alembic.ini upgrade head",
+    "check": "npm --prefix frontend run check && uv run --project backend ruff check backend && uv run --project backend ruff format --check backend && uv run --project backend ty check --project backend",
+    "test:unit": "uv run --project backend pytest backend/tests/unit backend/tests/architecture && npm --prefix frontend test -- --run",
+    "test:integration": "uv run --project backend pytest backend/tests/integration",
+    "test:e2e": "playwright test",
+    "test:acceptance": "playwright test e2e/tests/api.spec.ts",
+    "generate:api": "node scripts/generate-api.mjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@playwright/test": "^1.55.0",
+    "embedded-postgres": "18.4.0-beta.17"
+  }
+}

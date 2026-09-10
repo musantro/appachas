@@ -1,0 +1,118 @@
+name: Quality and production
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: appachas-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.5'
+          python-version: '3.13'
+          enable-cache: true
+      - run: npm ci
+      - run: npm --prefix frontend ci
+      - run: uv sync --project backend --frozen
+      - run: npm run check
+      - run: npm run test:unit
+      - run: npm run generate:api
+      - name: Generated API contract is committed
+        run: git diff --exit-code -- backend/openapi.json frontend/src/lib/api.generated.ts
+      - run: npm --prefix frontend run build
+
+  acceptance:
+    needs: quality
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: appachas
+          POSTGRES_PASSWORD: appachas
+          POSTGRES_DB: appachas
+        ports: ['54322:5432']
+        options: >-
+          --health-cmd "pg_isready -U appachas -d appachas"
+          --health-interval 2s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://appachas:appachas@127.0.0.1:54322/appachas
+      COOKIE_SECURE: 'false'
+      APP_ENV: test
+      CRON_SECRET: acceptance-only-cron-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.5'
+          python-version: '3.13'
+          enable-cache: true
+      - run: npm ci
+      - run: uv sync --project backend --frozen
+      - run: npm run db:migrate
+      - run: npm run test:integration
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
+  production:
+    needs: [quality, acceptance]
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://appachas.vercel.app
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.5'
+          python-version: '3.13'
+      - run: uv sync --project backend --frozen
+      - name: Load production build settings
+        run: npx --yes vercel@59.11.7 pull --yes --environment=production
+      - name: Build the tested release
+        run: npm run build:production
+      - name: Apply production migrations
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      - name: Deploy the verified build
+        run: npm run deploy:production
+      - name: Verify production API and static application
+        run: node scripts/smoke-production.mjs https://appachas.vercel.app

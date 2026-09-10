@@ -1,0 +1,13 @@
+.env
+.env.*
+.local
+.agents
+.codex
+e2e
+test-results
+playwright-report
+backend/tests
+frontend/tests
+**/__pycache__
+**/.venv
+docs

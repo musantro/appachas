@@ -1,0 +1,28 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["dub1"],
+  "framework": "fastapi",
+  "buildCommand": "npm run build",
+  "functions": {
+    "app.py": {
+      "excludeFiles": "{.env*,.local/**,.git/**,.agents/**,.codex/**,frontend/**,backend/{tests,migrations,scripts}/**,backend/openapi.json,{docs,e2e,scripts,supabase,test-results,playwright-report,public,node_modules}/**}"
+    }
+  },
+  "rewrites": [
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/privacy", "destination": "/index.html" },
+    { "source": "/g/:path*", "destination": "/index.html" }
+  ],
+  "headers": [
+    { "source": "/(.*)", "headers": [
+      { "key": "Referrer-Policy", "value": "no-referrer" },
+      { "key": "X-Content-Type-Options", "value": "nosniff" },
+      { "key": "X-Frame-Options", "value": "DENY" },
+      { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
+      { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" }
+    ] },
+    { "source": "/api/:path*", "headers": [ { "key": "Cache-Control", "value": "no-store" } ] }
+  ],
+  "crons": [{ "path": "/api/internal/expire", "schedule": "0 3 * * *" }],
+  "git": { "deploymentEnabled": false }
+}

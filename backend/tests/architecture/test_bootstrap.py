@@ -1,0 +1,102 @@
+from contextlib import contextmanager
+
+import pytest
+from dependency_injector import providers
+from fastapi import Depends
+from fastapi.testclient import TestClient
+
+from appachas.contexts.groups.shared.infrastructure.http.dependencies import connection
+from appachas.infrastructure.bootstrap.adapters import Settings
+from appachas.infrastructure.bootstrap.container import Container
+from appachas.main import create_app
+
+
+class FakePool:
+    def __init__(self):
+        self.opened = self.closed = self.acquired = self.released = 0
+
+    def open(self):
+        self.opened += 1
+
+    def close(self):
+        self.closed += 1
+
+    @contextmanager
+    def connection(self):
+        self.acquired += 1
+        try:
+            yield self
+        finally:
+            self.released += 1
+
+    def execute(self, query):
+        return self
+
+
+@pytest.fixture
+def fake_application():
+    container = Container()
+    pool = FakePool()
+    container.pool.override(providers.Object(pool))
+    container.settings.override(providers.Object(Settings("unused", "cron", False, (), 2)))
+    app = create_app(container)
+    yield app, pool
+    container.unwire()
+    container.reset_override()
+
+
+def test_request_resource_returns_connection_and_lifespan_closes_pool(fake_application):
+    # Arrange / Given
+    app, pool = fake_application
+    # Act / When
+    with TestClient(app) as client:
+        response = client.get("/api/health")
+    # Assert / Then
+    assert response.status_code == 200
+    assert (pool.opened, pool.closed, pool.acquired, pool.released) == (1, 1, 1, 1)
+
+
+def test_failure_returns_request_resource_and_never_logs_private_exception(
+    fake_application, caplog
+):
+    # Arrange / Given
+    app, pool = fake_application
+
+    @app.get("/api/failure")
+    def failure(current=Depends(connection)):
+        raise RuntimeError("private-alias private-token secret-SQL")
+
+    # Act / When
+    with TestClient(app) as client:
+        response = client.get("/api/failure")
+    # Assert / Then
+    assert response.status_code == 500
+    assert pool.released == pool.acquired == 1
+    assert "private" not in response.text
+    assert "private" not in caplog.text
+    assert "secret-SQL" not in caplog.text
+
+
+def test_cross_origin_mutation_rejected_before_acquiring_connection(fake_application):
+    # Arrange / Given
+    app, pool = fake_application
+    # Act / When
+    with TestClient(app) as client:
+        response = client.post("/api/groups", json={}, headers={"Origin": "https://evil.example"})
+    # Assert / Then
+    assert response.status_code == 403
+    assert response.json()["code"] == "origin_forbidden"
+    assert pool.acquired == 0
+
+
+def test_creation_rate_limit_returns_problem_details(fake_application):
+    # Arrange / Given
+    app, _ = fake_application
+    with TestClient(app) as client:
+        for _ in range(2):
+            client.post("/api/groups", json={}, headers={"Origin": "http://testserver"})
+        # Act / When
+        response = client.post("/api/groups", json={}, headers={"Origin": "http://testserver"})
+    # Assert / Then
+    assert response.status_code == 429
+    assert response.json()["code"] == "rate_limited"

@@ -1,0 +1,11 @@
+[project]
+name = "appachas-deployment"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = ["appachas-backend", "fastapi>=0.115"]
+
+[tool.uv.sources]
+appachas-backend = { path = "backend" }
+
+[tool.vercel]
+entrypoint = "app:app"
