@@ -85,6 +85,8 @@ local `.env` files, database files and browser artifacts from entering a release
 `npm run deploy:production` publishes only that verified build to the linked
 project. Both commands support `VERCEL_TOKEN` through the environment; no token
 is passed in process arguments or stored in build command logs.
+In CI, `npm run pull:production` downloads only project-level build settings,
+so the deployment credential can remain restricted to Appachas.
 
 Production requires Vercel variables `DATABASE_URL`, `ALLOWED_ORIGINS`,
 `COOKIE_SECURE=true`, `APP_ENV=production` and `CRON_SECRET`. The GitHub repository

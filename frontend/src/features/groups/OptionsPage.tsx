@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Settings, UserRound, Users } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Avatar,
@@ -28,7 +28,7 @@ export function OptionsPage() {
       <GroupTabs />
       <div className="group-layout">
         <div className="stack">
-          {me && <IdentityOptions key={`${me.id}:${me.version}`} member={me} />}
+          {me && <IdentityOptions key={me.id} member={me} />}
           {group.role === "creator" && <GroupSettings key={group.version} />}
         </div>
         <aside className="stack">
@@ -55,6 +55,12 @@ function IdentityOptions({ member }: { member: Member }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [alias, setAlias] = useState(member.alias);
+  const lastServerAlias = useRef(member.alias);
+  useEffect(() => {
+    const previousAlias = lastServerAlias.current;
+    lastServerAlias.current = member.alias;
+    setAlias((draft) => (draft === previousAlias ? member.alias : draft));
+  }, [member.alias]);
   const [target, setTarget] = useState("");
   const [message, setMessage] = useState("");
   const [validation, setValidation] = useState("");

@@ -105,7 +105,7 @@ jobs:
           python-version: '3.13'
       - run: uv sync --project backend --frozen
       - name: Load production build settings
-        run: npx --yes vercel@59.11.7 pull --yes --environment=production
+        run: npm run pull:production
       - name: Build the tested release
         run: npm run build:production
       - name: Apply production migrations

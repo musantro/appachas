@@ -53,3 +53,12 @@ source and static output to a private temporary directory, and runs the same
 native Vercel Python build there. The independent package check rejects private
 files and verifies that the bundled backend matches the source. Deployment uses
 that verified directory. The original source tree and local data are preserved.
+
+## Project-scoped CI credentials
+
+The standard `vercel pull` command in CLI 59.11.7 also requests the team profile,
+which a project-scoped token cannot read. `scripts/pull-production.mjs` requests
+only the configured project's settings, checks both project and owner IDs, and
+writes a strict allowlist of non-secret build settings. The native build and
+deploy commands then use that link. Runtime secrets remain in Vercel; the CI
+credential does not need team-wide or account-wide permissions.
