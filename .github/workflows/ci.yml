@@ -42,7 +42,6 @@ jobs:
 
   acceptance:
     needs: quality
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -79,7 +78,7 @@ jobs:
       - run: npm run db:migrate
       - run: npm run test:integration
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
 
   production:

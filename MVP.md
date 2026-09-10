@@ -76,7 +76,7 @@ La selección local se conserva hasta borrar los datos del sitio y solo sirve pa
 
 El alias es global y lo ve todo el grupo. El integrante puede cambiar su propio alias desde Opciones y el creador puede renombrar a cualquier integrante. El cambio conserva el identificador interno, actualiza el historial y se rechaza si crea un duplicado.
 
-Cuando el creador añade un integrante después de que existan movimientos, el nuevo integrante empieza con saldo cero y no se modifica el historial anterior. Solo puede participar en movimientos nuevos.
+Cuando el creador añade un integrante después de que existan movimientos, el nuevo integrante empieza con saldo cero y no se modifica automáticamente el historial anterior. Puede participar tanto en movimientos nuevos como en anteriores: al editar un gasto, reembolso o aportación se le puede seleccionar como pagador/origen o participante/receptor, independientemente de su fecha de alta. Guardar esa edición recalcula los repartos y balances, conservando `created_at`.
 
 Permisos del enlace de integrantes:
 
@@ -225,7 +225,7 @@ La pantalla ofrece botones separados de «Copiar texto» y «Compartir» mediant
 - Se admiten Unicode, tildes, ñ, emojis y signos normales.
 - Los nombres de integrantes son únicos ignorando mayúsculas y espacios laterales.
 - El identificador interno de un integrante es estable aunque cambie su alias.
-- Un integrante añadido después de los primeros movimientos empieza con saldo cero y no se incorpora retroactivamente al historial.
+- Un integrante añadido después de los primeros movimientos empieza con saldo cero, sin modificar automáticamente el historial. Puede incorporarse a movimientos anteriores mediante su edición.
 - El integrante creador permanece siempre en el grupo y su identidad no se puede liberar.
 - El pagador de un gasto o reembolso puede no ser participante.
 - Un gasto y un reembolso comparten campos y lógica de reparto; solo cambia el signo en backend.
@@ -375,7 +375,7 @@ El MVP se considera listo cuando:
 - **US-19 — Cambiar alias propio:** Como integrante, dado que estoy identificado, cuando cambio mi alias desde Opciones por uno válido y no duplicado, entonces el nuevo alias debe actualizarse para todo el grupo y en el historial.
 - **US-20 — Renombrar integrante:** Como creador, dado que existe un integrante, cuando cambio su alias por uno válido y no duplicado, entonces debe actualizarse su alias global sin cambiar su identificador, reclamación ni orden de alta.
 - **US-21 — Gestionar integrantes:** Como creador, dado que el grupo sigue disponible, cuando añado, renombro o elimino un integrante según las reglas, entonces debo poder hacerlo sin cambiar el enlace común ni el enlace de creador.
-- **US-22 — Añadir integrante sin recalcular historial:** Como creador, dado que ya existen movimientos, cuando añado un integrante, entonces debe empezar con saldo cero y no debe incorporarse a movimientos anteriores.
+- **US-22 — Añadir integrante y permitir su participación anterior:** Como creador, dado que ya existen movimientos, cuando añado un integrante, entonces debe empezar con saldo cero sin modificar automáticamente esos movimientos; al editarlos, debe poder seleccionarse como pagador/origen o participante/receptor y deben recalcularse los balances al guardar.
 - **US-23 — Impedir borrar integrante con movimientos:** Como creador, dado que un integrante aparece en algún movimiento, cuando intento eliminarlo, entonces debo recibir un error y el integrante debe conservarse.
 - **US-24 — Borrar integrante sin movimientos:** Como creador, dado que un integrante no aparece en movimientos pero tiene una identidad reclamada, cuando lo elimino, entonces debe eliminarse y su identidad debe liberarse automáticamente.
 - **US-25 — Permisos de integrante:** Como integrante, dado que he reclamado una identidad, cuando uso el enlace común, entonces debo poder consultar y gestionar cualquier movimiento, pero no cambiar grupo, fechas, integrantes ni cerrar.

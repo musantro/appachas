@@ -31,6 +31,15 @@ signed refund values for presentation, without mutating the domain objects.
 Invalid persisted movements fail explicitly instead of silently omitting a
 member or returning an unbalanced settlement.
 
+## Members added after existing movements
+
+Adding a member does not automatically change saved allocations. The member
+can nevertheless be selected when editing any earlier expense, refund or
+contribution, as payer/source or participant/recipient. The owner explicitly
+requested this correction; membership age is not an eligibility restriction.
+Existing amount, membership, version and conservation checks still apply, and
+edits preserve the movement's creation time. No migration is required.
+
 ## Release ownership
 
 GitHub Actions owns production deployments after the quality, PostgreSQL

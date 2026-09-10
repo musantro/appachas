@@ -78,15 +78,6 @@ def build_movement(
         )
     for member_id in selected:
         group.member(member_id)
-    if previous and any(
-        member.joined_at is not None and member.joined_at > previous.created_at
-        for member in (group.member(member_id) for member_id in [data.payer_id, *selected])
-    ):
-        raise invalid(
-            "member_joined_after_movement",
-            "Los integrantes añadidos después solo pueden participar en movimientos nuevos.",
-            "participant_ids",
-        )
     ordered = [m.id for m in sorted(group.members, key=lambda m: m.position) if m.id in selected]
     if data.type == "contribution" and data.payer_id in selected:
         raise invalid("source_is_recipient", "El origen no puede ser receptor.", "participant_ids")

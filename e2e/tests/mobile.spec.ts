@@ -1,10 +1,11 @@
 import AxeBuilder from "@axe-core/playwright";
-import type { Page } from "@playwright/test";
+import { devices, type Page } from "@playwright/test";
 import {
   type CreatedGroup,
   calendarDate,
   expect,
   expenseInput,
+  type Movement,
   rejected,
   test,
 } from "../support";
@@ -89,6 +90,67 @@ async function noHorizontalOverflow(page: Page) {
     measurement.content,
     `Overflowing elements: ${measurement.overflowing.join(", ")}`,
   ).toBeLessThanOrEqual(measurement.viewport + 1);
+}
+
+async function movementControlsFit(page: Page) {
+  const labels = await page.locator(".type-option").evaluateAll((elements) =>
+    elements.map((element) => {
+      const box = element.getBoundingClientRect();
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      const rects: DOMRect[] = [];
+      let node = walker.nextNode();
+      while (node) {
+        const content = node.textContent ?? "";
+        if (content.trim()) {
+          const range = document.createRange();
+          range.setStart(node, content.search(/\S/));
+          range.setEnd(node, content.trimEnd().length);
+          rects.push(...Array.from(range.getClientRects()));
+        }
+        node = walker.nextNode();
+      }
+      return {
+        label: element.textContent?.trim(),
+        lines: new Set(rects.map((rect) => Math.round(rect.top))).size,
+        contained: rects.every(
+          (rect) => rect.left >= box.left && rect.right <= box.right + 1,
+        ),
+      };
+    }),
+  );
+  expect(labels).toEqual(
+    ["Gasto", "Reembolso", "Aportación"].map((label) => ({
+      label,
+      lines: 1,
+      contained: true,
+    })),
+  );
+  const dates = await page
+    .locator('input[type="date"]')
+    .evaluateAll((elements) =>
+      elements.map((element) => {
+        const box = element.getBoundingClientRect();
+        const field = element.closest(".field")?.getBoundingClientRect();
+        const card = element.closest(".card")?.getBoundingClientRect();
+        return {
+          withinField:
+            !!field &&
+            box.left >= field.left - 1 &&
+            box.right <= field.right + 1,
+          withinCard:
+            !!card && box.left >= card.left - 1 && box.right <= card.right + 1,
+          contentFits: element.scrollWidth <= element.clientWidth + 1,
+        };
+      }),
+    );
+  expect(dates.length).toBeGreaterThan(0);
+  expect(
+    dates.every(
+      (date) => date.withinField && date.withinCard && date.contentFits,
+    ),
+  ).toBe(true);
+  await noHorizontalOverflow(page);
+  await touchTargets(page);
 }
 
 async function withEnlargedText(page: Page, verify: () => Promise<void>) {
@@ -843,6 +905,110 @@ test("mobile member options change alias and identity while creator options mana
     .poll(async () => (await created.creator.read()).members)
     .toHaveLength(3);
 });
+
+test("mobile explicitly includes a later member when editing an old expense", async ({
+  page,
+  groups,
+}) => {
+  // Arrange / Given: the original expense predates both today and the new member.
+  const created = await groups.create({ members: ["Ana", "Bruno"] });
+  const original: Movement = await created.creator.write(
+    "POST",
+    "/movements",
+    expenseInput(created.group, {
+      date: calendarDate(-1),
+      amount: "9.01",
+      concept: "Reserva antigua",
+    }),
+  );
+  await created.creator.write("POST", "/members", { alias: "Carla" });
+  const joined = await created.creator.read();
+  const carla = joined.members[2];
+  expect(joined.balances[2].amount_cents).toBe(0);
+  expect(
+    joined.movements[0].allocations.some(
+      (allocation) => allocation.member_id === carla.id,
+    ),
+  ).toBe(false);
+  await page.goto(creatorPath(created));
+  await page
+    .getByRole("link", { name: "Editar Reserva antigua", exact: true })
+    .click();
+
+  // Act / When: adding a member alone did not select them; this edit does.
+  const participant = page.getByRole("checkbox", { name: /Carla/ });
+  await expect(participant).not.toBeChecked();
+  await participant.check();
+  await page.getByLabel("Pagador", { exact: true }).selectOption(carla.id);
+  await page
+    .getByRole("button", { name: "Guardar movimiento", exact: true })
+    .click();
+
+  // Assert / Then
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/g");
+  await expect(
+    page.getByRole("link", { name: "Editar Reserva antigua", exact: true }),
+  ).toBeVisible();
+  const updated = await created.creator.read();
+  expect(updated.movements[0].version).toBe(original.version + 1);
+  expect(Date.parse(updated.movements[0].created_at)).toBe(
+    Date.parse(original.created_at),
+  );
+  expect(updated.movements[0].date).toBe(original.date);
+  expect(updated.movements[0].payer_id).toBe(carla.id);
+  expect(
+    updated.movements[0].allocations.map(
+      (allocation) => allocation.amount_cents,
+    ),
+  ).toEqual([301, 300, 300]);
+  expect(updated.balances.map((balance) => balance.amount_cents)).toEqual([
+    -301, -300, 601,
+  ]);
+  expect(updated.total_cents).toBe(901);
+});
+
+for (const browserName of ["chromium", "webkit"] as const) {
+  test(`${browserName} movement controls keep labels whole and dates contained at 320/390 pixels and 200 percent text`, async ({
+    playwright,
+    groups,
+  }) => {
+    // Arrange / Given: only this focused layout scenario launches WebKit.
+    const browser = await playwright[browserName].launch();
+    try {
+      const context = await browser.newContext({
+        ...devices[browserName === "webkit" ? "iPhone 13" : "Pixel 7"],
+        baseURL: groups.origin,
+        locale: "es-ES",
+        timezoneId: "UTC",
+      });
+      const page = await context.newPage();
+      const created = await groups.create();
+      for (const width of [320, 390]) {
+        await test.step(`${width} px`, async () => {
+          await page.setViewportSize({ width, height: 844 });
+          await page.goto(creatorPath(created, "/movements/new"));
+          await expect(
+            page.getByRole("heading", {
+              name: "Añadir movimiento",
+              exact: true,
+            }),
+          ).toBeVisible();
+          await page.evaluate(() => document.fonts.ready);
+          for (const name of ["Gasto", "Reembolso", "Aportación"]) {
+            // Act / When
+            await page.getByRole("radio", { name, exact: true }).check();
+
+            // Assert / Then: inspect actual text line boxes, not just page width.
+            await movementControlsFit(page);
+            await withEnlargedText(page, () => movementControlsFit(page));
+          }
+        });
+      }
+    } finally {
+      await browser.close();
+    }
+  });
+}
 
 test("all primary screens remain accessible at 320 pixels and 200 percent text without third-party requests", async ({
   page,
