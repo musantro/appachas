@@ -5,14 +5,16 @@ record expenses, refunds and contributions, and settle the remaining balances.
 The interface is in Spanish, works from 320 px upward, and follows
 [Mesa Clara](DESIGN.md).
 
+Live app: **[appachas.vercel.app](https://appachas.vercel.app)**.
+
 React + TypeScript + Vite, FastAPI + Python 3.13, and PostgreSQL. Production runs
 on Vercel's native Python runtime with static assets on its CDN and Supabase
 PostgreSQL. See [the architecture](docs/code-architecture.md),
 [product requirements](MVP.md), [money algorithms](docs/algoritmo.md),
 [session contract](docs/security-and-sessions.md), and
 [implementation decisions](docs/decisions.md).
-The [delivery verification](docs/verification.md) distinguishes completed local
-checks from public production verification.
+The [delivery verification](docs/verification.md) records local checks, the
+successful release pipeline and public production acceptance results.
 
 ## Local development
 

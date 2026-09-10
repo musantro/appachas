@@ -677,6 +677,9 @@ test("mobile converts an expense to refund, confirms deletion and refreshes anot
     .getByRole("dialog")
     .getByRole("button", { name: /Eliminar/, exact: false })
     .click();
+  // Deletion returns to history after refreshing the browser's group state.
+  // The edit page never contained a history link, so its absence is not enough.
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/g");
   await expect(
     page.getByRole("link", { name: "Editar Reserva", exact: true }),
   ).toHaveCount(0);
