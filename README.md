@@ -5,7 +5,10 @@ record expenses, refunds and contributions, and settle the remaining balances.
 The interface is in Spanish, works from 320 px upward, and follows
 [Mesa Clara](DESIGN.md).
 
-Live app: **[appachas.vercel.app](https://appachas.vercel.app)**.
+Production domain: **[appachas.es](https://appachas.es)**.
+The [previous domain](https://appachas.vercel.app) remains available for existing
+links and sessions. See [custom-domain setup](docs/custom-domain.md) for DNS,
+activation and verification.
 
 React + TypeScript + Vite, FastAPI + Python 3.13, and PostgreSQL. Production runs
 on Vercel's native Python runtime with static assets on its CDN and Supabase

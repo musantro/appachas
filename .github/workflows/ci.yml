@@ -88,7 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://appachas.vercel.app
+      url: https://appachas.es
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -114,5 +114,7 @@ jobs:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
       - name: Deploy the verified build
         run: npm run deploy:production
-      - name: Verify production API and static application
+      - name: Verify custom domain, API, static application and www redirect
+        run: node scripts/smoke-production.mjs
+      - name: Verify the previous domain remains available for existing sessions
         run: node scripts/smoke-production.mjs https://appachas.vercel.app

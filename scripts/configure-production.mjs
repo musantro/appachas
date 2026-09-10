@@ -39,7 +39,7 @@ if (mode === 'environment') {
     DATABASE_URL: pooler.toString(),
     COOKIE_SECURE: 'true',
     APP_ENV: 'production',
-    ALLOWED_ORIGINS: 'https://appachas.vercel.app',
+    ALLOWED_ORIGINS: 'https://appachas.es,https://appachas.vercel.app',
   };
   if (!existing.envs?.some((entry) => entry.key === 'CRON_SECRET')) values.CRON_SECRET = randomBytes(32).toString('hex');
   for (const [key, value] of Object.entries(values)) {
