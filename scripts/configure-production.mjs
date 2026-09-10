@@ -20,6 +20,9 @@ async function api(path, method, body) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const result = await response.json();
+  if (response.status === 403 && result.error?.message === 'Cannot create tokens for this app.') {
+    throw new Error('This Vercel CLI login cannot create access tokens. Create a project-scoped token in the Vercel Account Tokens dashboard and save it directly as the GitHub VERCEL_TOKEN secret.');
+  }
   if (!response.ok) throw new Error(`Vercel ${method} failed (${response.status}, ${result.error?.code || 'unknown'})`);
   return result;
 }
@@ -47,8 +50,8 @@ if (mode === 'environment') {
   secret('PRODUCTION_DATABASE_URL', pooler.toString());
 } else if (mode === 'ci') {
   const token = await api('/v3/user/tokens', 'POST', { name: 'Appachas GitHub Actions', projectId: project.projectId });
-  if (!token.token) throw new Error('Vercel did not return a deployment token');
-  secret('VERCEL_TOKEN', token.token);
+  if (typeof token.bearerToken !== 'string') throw new Error('Vercel did not return a deployment token');
+  secret('VERCEL_TOKEN', token.bearerToken);
   secret('VERCEL_ORG_ID', project.orgId);
   secret('VERCEL_PROJECT_ID', project.projectId);
 } else {
