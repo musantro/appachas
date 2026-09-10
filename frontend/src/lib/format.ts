@@ -57,32 +57,12 @@ export function initials(alias: string): string {
   return Array.from(alias)[0]?.toLocaleUpperCase("es") ?? "?";
 }
 
-export function groupPath(token: string, page = ""): string {
+export function groupPath(groupId: string, page = ""): string {
+  return `/g${page}?group=${encodeURIComponent(groupId)}`;
+}
+
+export function entryPath(token: string, page = ""): string {
   return `/g${page}#${encodeURIComponent(token)}`;
-}
-
-export function sharedLink(token: string): string | null {
-  try {
-    return localStorage.getItem(`appachas:member-link:${token}`);
-  } catch {
-    return null;
-  }
-}
-
-export function rememberSharedLink(token: string, url: string): void {
-  try {
-    localStorage.setItem(`appachas:member-link:${token}`, url);
-  } catch {
-    /* The creation page still has the link in memory. */
-  }
-}
-
-export function forgetSharedLink(token: string): void {
-  try {
-    localStorage.removeItem(`appachas:member-link:${token}`);
-  } catch {
-    /* Local storage may be unavailable. */
-  }
 }
 
 export async function copyText(text: string): Promise<void> {

@@ -4,7 +4,7 @@ import { ApiError, api } from "../../src/lib/api";
 afterEach(() => vi.unstubAllGlobals());
 
 describe("typed HTTP adapter", () => {
-  it("sends secret access in a header and preserves the necessary session cookie", async () => {
+  it("uses only the public group reference and session cookie after authentication", async () => {
     // Arrange / Given
     const transport = vi
       .fn()
@@ -13,13 +13,36 @@ describe("typed HTTP adapter", () => {
       );
     vi.stubGlobal("fetch", transport);
     // Act / When
-    await api.group("fixture-secret");
+    await api.group("fixture-group");
     // Assert / Then
     expect(transport).toHaveBeenCalledWith(
       "/api/group",
       expect.objectContaining({
         credentials: "same-origin",
-        headers: { Authorization: "Bearer fixture-secret" },
+        headers: { "X-Appachas-Group": "fixture-group" },
+      }),
+    );
+  });
+  it("uses the link token only when exchanging it for a session", async () => {
+    // Arrange / Given
+    const transport = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ group: { id: "fixture-group" } }), {
+        status: 200,
+      }),
+    );
+    vi.stubGlobal("fetch", transport);
+    // Act / When
+    await api.startSession("fixture-entry-secret", "fixture-group");
+    // Assert / Then
+    expect(transport).toHaveBeenCalledWith(
+      "/api/group/session",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "X-Appachas-Group": "fixture-group",
+          Authorization: "Bearer fixture-entry-secret",
+        },
       }),
     );
   });

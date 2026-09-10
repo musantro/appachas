@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   CalendarDays,
@@ -14,11 +14,14 @@ import { type FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Feedback, Field } from "../../components/common";
 import { Button } from "../../components/ui/button";
+import { rememberEntryLinks } from "../../lib/access";
 import { api } from "../../lib/api";
-import { groupPath, localDate, rememberSharedLink } from "../../lib/format";
+import { entryPath, groupPath, localDate } from "../../lib/format";
+import { groupKey } from "../groups/GroupContext";
 
 export function CreateGroup() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [start, setStart] = useState(localDate());
   const [end, setEnd] = useState(localDate(1));
@@ -31,11 +34,12 @@ export function CreateGroup() {
   const create = useMutation({
     mutationFn: api.createGroup,
     onSuccess: (result) => {
-      const memberUrl = `${window.location.origin}${groupPath(result.member_token)}`;
-      rememberSharedLink(result.creator_token, memberUrl);
-      navigate(groupPath(result.creator_token, "/share"), {
-        state: { memberUrl },
+      rememberEntryLinks(result.group.id, {
+        memberUrl: `${window.location.origin}${entryPath(result.member_token)}`,
+        creatorUrl: `${window.location.origin}${entryPath(result.creator_token)}`,
       });
+      queryClient.setQueryData(groupKey(result.group.id), result.group);
+      navigate(groupPath(result.group.id, "/share"));
     },
   });
 

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { equalAmounts, groupPath, parseAmount } from "../../src/lib/format";
+import {
+  entryPath,
+  equalAmounts,
+  groupPath,
+  parseAmount,
+} from "../../src/lib/format";
 
 describe("amount inputs", () => {
   it.each([
@@ -53,10 +58,20 @@ describe("amount inputs", () => {
     // Arrange / Given
     const token = "test-link-token";
     // Act / When
-    const url = new URL(groupPath(token, "/options"), "https://example.test");
+    const url = new URL(entryPath(token, "/options"), "https://example.test");
     // Assert / Then
     expect(url.pathname).toBe("/g/options");
     expect(url.search).toBe("");
     expect(url.hash).toBe(`#${token}`);
+  });
+  it("navigates authenticated group pages using a non-secret reference", () => {
+    // Arrange / Given
+    const id = "11111111-1111-4111-8111-111111111111";
+    // Act / When
+    const url = new URL(groupPath(id, "/options"), "https://example.test");
+    // Assert / Then
+    expect(url.pathname).toBe("/g/options");
+    expect(url.searchParams.get("group")).toBe(id);
+    expect(url.hash).toBe("");
   });
 });

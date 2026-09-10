@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from appachas.contexts.groups.shared.application.ports import Actor, Session
 from appachas.contexts.groups.shared.domain.models import Group, Member
 
 
@@ -53,6 +54,11 @@ class MemoryRepository:
         self.group: Group | None = group
         self.commits = 0
         self.rollbacks = 0
+        self.sessions = {
+            m.session_hash: Session(m.session_hash, group.id, m.id, False, group.created_at)
+            for m in group.members
+            if m.session_hash
+        }
 
     def get(self, token_hash: str, *, lock: bool):
         if not self.group or token_hash not in ("creator", "member"):
@@ -61,6 +67,28 @@ class MemoryRepository:
 
     def create(self, group: Group, creator_hash: str, member_hash: str):
         self.group = group
+
+    def get_by_id(self, group_id: str, *, lock: bool):
+        return self.group if self.group and self.group.id == group_id else None
+
+    def session_actor(self, group_id: str, session_hash: str):
+        session = self.sessions.get(session_hash)
+        if not session or session.group_id != group_id or session.revoked_at or not self.group:
+            return None
+        member = self.group.member(session.member_id)
+        if not session.is_creator and member.session_hash != session_hash:
+            return None
+        return Actor(session.member_id, session.is_creator)
+
+    def save_session(self, session: Session):
+        self.sessions[session.token_hash] = session
+
+    def revoke_member_sessions(self, member_id: str, revoked_at: datetime):
+        from dataclasses import replace
+
+        for key, session in list(self.sessions.items()):
+            if session.member_id == member_id and not session.is_creator and not session.revoked_at:
+                self.sessions[key] = replace(session, revoked_at=revoked_at)
 
     def save_group(self, group: Group):
         self.group = group
@@ -73,6 +101,7 @@ class MemoryRepository:
     def delete_member(self, member_id: str):
         assert self.group
         self.group.members = [m for m in self.group.members if m.id != member_id]
+        self.sessions = {key: s for key, s in self.sessions.items() if s.member_id != member_id}
 
     def save_movement(self, group_id: str, movement):
         assert self.group
@@ -84,6 +113,7 @@ class MemoryRepository:
 
     def delete_group(self, group_id: str):
         self.group = None
+        self.sessions = {}
 
     def expiry_candidates(self):
         return [self.group] if self.group else []
@@ -98,11 +128,13 @@ class MemoryUnitOfWork:
 
     def __enter__(self):
         self.snapshot = deepcopy(self.repository.group)
+        self.session_snapshot = deepcopy(self.repository.sessions)
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type:
             self.repository.group = self.snapshot
+            self.repository.sessions = self.session_snapshot
             self.repository.rollbacks += 1
         else:
             self.repository.commits += 1

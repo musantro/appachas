@@ -19,18 +19,18 @@ import { calendarDate, dateRange, groupPath, money } from "../../lib/format";
 import { groupKey, useGroup } from "./GroupContext";
 
 export function GroupTabs() {
-  const { token } = useGroup();
+  const { groupId } = useGroup();
   return (
     <nav className="group-tabs" aria-label="Secciones del grupo">
-      <NavLink to={groupPath(token)} end>
+      <NavLink to={groupPath(groupId)} end>
         <List size={17} aria-hidden="true" />
         Movimientos
       </NavLink>
-      <NavLink to={groupPath(token, "/settlement")}>
+      <NavLink to={groupPath(groupId, "/settlement")}>
         <Wallet size={17} aria-hidden="true" />
         Liquidación
       </NavLink>
-      <NavLink to={groupPath(token, "/options")}>
+      <NavLink to={groupPath(groupId, "/options")}>
         <Settings size={17} aria-hidden="true" />
         Opciones
       </NavLink>
@@ -74,7 +74,7 @@ export function Balances({ group }: { group: Group }) {
 }
 
 export function GroupPage() {
-  const { group, token } = useGroup();
+  const { group, groupId } = useGroup();
   const queryClient = useQueryClient();
   const me = group.members.find((member) => member.id === group.my_member_id);
   const names = Object.fromEntries(
@@ -88,7 +88,10 @@ export function GroupPage() {
       >
         <div className="group-header-actions">
           <Button asChild variant="outline">
-            <Link to={groupPath(token, "/share")} aria-label="Compartir grupo">
+            <Link
+              to={groupPath(groupId, "/share")}
+              aria-label="Compartir grupo"
+            >
               <Share2 size={18} aria-hidden="true" />
               <span>Compartir grupo</span>
             </Link>
@@ -122,7 +125,7 @@ export function GroupPage() {
               <p className="muted">Entre todos, todo claro.</p>
             </div>
             <Button asChild>
-              <Link to={groupPath(token, "/movements/new")}>
+              <Link to={groupPath(groupId, "/movements/new")}>
                 <Plus size={18} aria-hidden="true" />
                 Añadir movimiento
               </Link>
@@ -140,7 +143,7 @@ export function GroupPage() {
                 className="icon-button"
                 onClick={() =>
                   void queryClient.invalidateQueries({
-                    queryKey: groupKey(token),
+                    queryKey: groupKey(groupId),
                   })
                 }
               >
@@ -167,7 +170,7 @@ export function GroupPage() {
                   <li key={movement.id}>
                     <Link
                       className="movement-row"
-                      to={groupPath(token, `/movements/${movement.id}`)}
+                      to={groupPath(groupId, `/movements/${movement.id}`)}
                       aria-label={`Editar ${movement.concept || "Aportación"}`}
                     >
                       <Avatar alias={names[movement.payer_id]} />
@@ -212,7 +215,7 @@ export function GroupPage() {
             <h2 className="text-base mb-4">Cómo van las cuentas</h2>
             <Balances group={group} />
             <Button asChild variant="outline" className="full-width mt-4">
-              <Link to={groupPath(token, "/settlement")}>
+              <Link to={groupPath(groupId, "/settlement")}>
                 Ver liquidación
                 <ChevronRight size={16} aria-hidden="true" />
               </Link>
@@ -229,7 +232,7 @@ export function GroupPage() {
       </div>
       <div className="mobile-add">
         <Button asChild className="full-width">
-          <Link to={groupPath(token, "/movements/new")}>
+          <Link to={groupPath(groupId, "/movements/new")}>
             <Plus size={18} aria-hidden="true" />
             Añadir movimiento
           </Link>

@@ -32,14 +32,17 @@ const movementLabels = {
 
 export function MovementPage() {
   const { movementId } = useParams();
-  const { group, token } = useGroup();
+  const { group, groupId } = useGroup();
   const queryClient = useQueryClient();
   const [refresh, setRefresh] = useState(0);
   const movement = group.movements.find((item) => item.id === movementId);
   if (movementId && !movement)
     return (
       <div className="narrow-page stack">
-        <PageHeading title="Movimiento no disponible" back={groupPath(token)} />
+        <PageHeading
+          title="Movimiento no disponible"
+          back={groupPath(groupId)}
+        />
         <p className="muted">
           Otra persona puede haberlo eliminado. Vuelve al grupo para consultar
           los movimientos actuales.
@@ -51,7 +54,7 @@ export function MovementPage() {
       key={`${movementId ?? "new"}:${refresh}`}
       movement={movement}
       onReload={async () => {
-        await queryClient.invalidateQueries({ queryKey: groupKey(token) });
+        await queryClient.invalidateQueries({ queryKey: groupKey(groupId) });
         setRefresh((value) => value + 1);
       }}
     />
@@ -65,7 +68,7 @@ function MovementEditor({
   movement?: Movement;
   onReload: () => Promise<void>;
 }) {
-  const { token, group } = useGroup();
+  const { groupId, group } = useGroup();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [type, setType] = useState<MovementInput["type"]>(
@@ -101,22 +104,22 @@ function MovementEditor({
     0,
   );
   const finish = async () => {
-    await queryClient.invalidateQueries({ queryKey: groupKey(token) });
-    navigate(groupPath(token));
+    await queryClient.invalidateQueries({ queryKey: groupKey(groupId) });
+    navigate(groupPath(groupId));
   };
   const save = useMutation({
     mutationFn: (input: MovementInput) =>
       movement
-        ? api.updateMovement(token, movement.id, {
+        ? api.updateMovement(groupId, movement.id, {
             ...input,
             version: version ?? movement.version,
           })
-        : api.createMovement(token, input),
+        : api.createMovement(groupId, input),
     onSuccess: finish,
   });
   const remove = useMutation({
     mutationFn: () =>
-      api.deleteMovement(token, movement?.id ?? "", version ?? 0),
+      api.deleteMovement(groupId, movement?.id ?? "", version ?? 0),
     onSuccess: finish,
   });
   const conflictError = save.error ?? remove.error;
@@ -199,7 +202,7 @@ function MovementEditor({
       <PageHeading
         title={movement ? "Editar movimiento" : "Añadir movimiento"}
         description="Apúntalo ahora. Las cuentas se actualizan para todos."
-        back={groupPath(token)}
+        back={groupPath(groupId)}
       />
       <form className="card stack" onSubmit={submit}>
         <fieldset disabled={busy}>
@@ -397,7 +400,7 @@ function MovementEditor({
         )}
         <div className="form-actions">
           <Button asChild variant="ghost">
-            <Link to={groupPath(token)}>Cancelar</Link>
+            <Link to={groupPath(groupId)}>Cancelar</Link>
           </Button>
           <Button type="submit" disabled={busy || conflict}>
             {save.isPending ? "Guardando…" : "Guardar movimiento"}

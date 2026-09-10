@@ -1,29 +1,18 @@
 import { ArrowRight, Check, Copy, Info, KeyRound, Share2 } from "lucide-react";
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Feedback, Field, PageHeading } from "../../components/common";
 import { Button } from "../../components/ui/button";
-import {
-  copyText,
-  dateRange,
-  groupPath,
-  sharedLink,
-  shareText,
-} from "../../lib/format";
+import { entryLinks } from "../../lib/access";
+import { copyText, dateRange, groupPath, shareText } from "../../lib/format";
 import { useGroup } from "./GroupContext";
 
 export function SharePage() {
-  const { group, token } = useGroup();
-  const location = useLocation();
+  const { group, groupId } = useGroup();
   const [message, setMessage] = useState("");
   const [error, setError] = useState<unknown>();
   const [busy, setBusy] = useState(false);
-  const creatorUrl = `${window.location.origin}${groupPath(token)}`;
-  const memberUrl =
-    group.role === "member"
-      ? creatorUrl
-      : ((location.state as { memberUrl?: string } | null)?.memberUrl ??
-        sharedLink(token));
+  const { creatorUrl, memberUrl } = entryLinks(groupId);
   const text = `${group.name} · ${dateRange(group.start_date, group.end_date)}\nVamos a llevar las cuentas en Appachas. Abre el enlace y elige tu nombre para entrar al grupo:\n${memberUrl ?? ""}`;
   async function perform(action: "share" | "copy-member" | "copy-creator") {
     setError(undefined);
@@ -38,7 +27,7 @@ export function SharePage() {
           );
       } else {
         await copyText(
-          action === "copy-creator" ? creatorUrl : (memberUrl ?? ""),
+          action === "copy-creator" ? (creatorUrl ?? "") : (memberUrl ?? ""),
         );
         setMessage(
           action === "copy-creator"
@@ -64,6 +53,12 @@ export function SharePage() {
         description={`${group.name} · ${dateRange(group.start_date, group.end_date)}`}
       />
       <div className="stack">
+        {(memberUrl || creatorUrl) && (
+          <p className="notice">
+            Guarda los enlaces antes de recargar o cerrar esta pestaña. Appachas
+            no los guarda en el navegador y no puede recuperarlos.
+          </p>
+        )}
         <section className="card stack">
           <div>
             <h2>Invita al resto</h2>
@@ -99,9 +94,9 @@ export function SharePage() {
             </>
           ) : (
             <p className="notice">
-              El enlace de integrantes se mostró al crear el grupo y se conserva
-              en ese navegador. Abre esta pantalla allí o recupera el enlace del
-              chat del grupo.
+              El enlace de integrantes se mostró al crear el grupo. No se guarda
+              en el navegador. Puedes recuperarlo del chat en el que lo
+              compartisteis.
             </p>
           )}
           <div className="info-inline">
@@ -124,27 +119,37 @@ export function SharePage() {
               grupo. Guárdalo: si lo pierdes, no se puede recuperar ni
               regenerar.
             </p>
-            <Field id="creator-link" label="Enlace de creador">
-              <input
-                id="creator-link"
-                readOnly
-                value={creatorUrl}
-                onFocus={(event) => event.target.select()}
-              />
-            </Field>
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => void perform("copy-creator")}
-            >
-              <Copy size={17} aria-hidden="true" />
-              Copiar enlace de creador
-            </Button>
+            {creatorUrl ? (
+              <>
+                <Field id="creator-link" label="Enlace de creador">
+                  <input
+                    id="creator-link"
+                    readOnly
+                    value={creatorUrl}
+                    onFocus={(event) => event.target.select()}
+                  />
+                </Field>
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void perform("copy-creator")}
+                >
+                  <Copy size={17} aria-hidden="true" />
+                  Copiar enlace de creador
+                </Button>
+              </>
+            ) : (
+              <p className="muted">
+                Este enlace solo está disponible al crear el grupo o al abrir el
+                enlace privado original. Usa la copia que guardaste; tu sesión
+                actual sigue funcionando.
+              </p>
+            )}
           </section>
         )}
         <Feedback success={message} error={error} />
         <Button asChild variant="outline" className="full-width">
-          <Link to={groupPath(token)}>
+          <Link to={groupPath(groupId)}>
             Ir al grupo
             <ArrowRight size={17} aria-hidden="true" />
           </Link>

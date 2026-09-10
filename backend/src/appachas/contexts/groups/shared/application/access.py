@@ -13,19 +13,28 @@ from appachas.contexts.groups.shared.domain.models import Group
 def load_group(
     repository: Repository, access: Access, clock: Clock, *, lock: bool = False
 ) -> tuple[Group, Actor | None]:
-    found = repository.get(access.token_hash, lock=lock)
-    if found is None:
+    creator_access = False
+    if access.token_hash:
+        found = repository.get(access.token_hash, lock=lock)
+        if found is None:
+            raise Unavailable()
+        group, creator_access = found
+    elif access.group_id:
+        group = repository.get_by_id(access.group_id, lock=lock)
+        if group is None:
+            raise Unavailable()
+    else:
         raise Unavailable()
-    group, creator_access = found
     if group.expired(clock.today(group.timezone)):
         raise Unavailable()
     if creator_access:
         return group, Actor(group.creator_member_id, True)
-    member = next(
-        (m for m in group.members if access.session_hash and m.session_hash == access.session_hash),
-        None,
+    actor = (
+        repository.session_actor(group.id, access.session_hash)
+        if access.session_hash and access.group_id in (None, group.id)
+        else None
     )
-    return group, Actor(member.id, False) if member else None
+    return group, actor
 
 
 def require_actor(actor: Actor | None, *, creator: bool = False) -> Actor:

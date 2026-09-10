@@ -8,14 +8,25 @@ from appachas.contexts.groups.shared.domain.models import Group, Member, Movemen
 
 @dataclass(frozen=True)
 class Access:
-    token_hash: str
+    token_hash: str | None = None
     session_hash: str | None = None
+    group_id: str | None = None
 
 
 @dataclass(frozen=True)
 class Actor:
     member_id: str
     is_creator: bool
+
+
+@dataclass(frozen=True)
+class Session:
+    token_hash: str
+    group_id: str
+    member_id: str
+    is_creator: bool
+    created_at: datetime
+    revoked_at: datetime | None = None
 
 
 class Clock(Protocol):
@@ -30,6 +41,10 @@ class Tokens(Protocol):
 
 class Repository(Protocol):
     def get(self, token_hash: str, *, lock: bool) -> tuple[Group, bool] | None: ...
+    def get_by_id(self, group_id: str, *, lock: bool) -> Group | None: ...
+    def session_actor(self, group_id: str, session_hash: str) -> Actor | None: ...
+    def save_session(self, session: Session) -> None: ...
+    def revoke_member_sessions(self, member_id: str, revoked_at: datetime) -> None: ...
     def create(self, group: Group, creator_hash: str, member_hash: str) -> None: ...
     def save_group(self, group: Group) -> None: ...
     def save_member(self, group_id: str, member: Member) -> None: ...

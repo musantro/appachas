@@ -175,8 +175,10 @@ function PrivacyPage() {
           <p>
             Usamos una cookie técnica para conservar la identidad que reclamas
             en este navegador. No es una cookie publicitaria ni se utiliza para
-            seguir tu actividad. El navegador del creador también guarda el
-            enlace de integrantes para volver a compartirlo.
+            seguir tu actividad. Los enlaces secretos se utilizan solo para
+            abrir una sesión y después se quitan de la barra de navegación. No
+            guardamos enlaces ni credenciales en el almacenamiento local del
+            navegador.
           </p>
         </section>
         <section>

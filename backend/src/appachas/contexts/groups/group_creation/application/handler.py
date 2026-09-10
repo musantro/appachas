@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from appachas.contexts.groups.shared.application.access import Handler
+from appachas.contexts.groups.shared.application.ports import Session
 from appachas.contexts.groups.shared.domain.errors import invalid
 from appachas.contexts.groups.shared.domain.models import (
     Group,
@@ -27,6 +28,7 @@ class CreatedGroup:
     group: Group
     creator_token: str
     member_token: str
+    session_token: str
 
 
 class CreateGroupHandler(Handler):
@@ -61,6 +63,10 @@ class CreateGroupHandler(Handler):
                 group.creator_member_id = member.id
         creator_token, creator_hash = self.tokens.generate()
         member_token, member_hash = self.tokens.generate()
+        session_token, session_hash = self.tokens.generate()
         with self.uow_factory() as uow:
             uow.repository.create(group, creator_hash, member_hash)
-        return CreatedGroup(group, creator_token, member_token)
+            uow.repository.save_session(
+                Session(session_hash, group.id, group.creator_member_id, True, self.clock.now())
+            )
+        return CreatedGroup(group, creator_token, member_token, session_token)

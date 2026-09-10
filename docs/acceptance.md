@@ -11,6 +11,13 @@ The offline recovery scenario disconnects the actual browser context, verifies
 an immediate recoverable error, reconnects and verifies that no movement is sent
 automatically. Only an explicit retry may create the movement.
 
+The session contract in `security-and-sessions.md` is verified independently:
+entry links are exchanged for opaque HttpOnly cookies, subsequent requests use
+only the cookie and public group reference, URLs lose their secret fragment,
+and browser storage/history never retains either secret link. HTTPS executions
+also require the session cookie's Secure flag. Cleanup attempts every group
+created by a scenario even if an earlier deletion fails, reporting no secrets.
+
 Run the application and migrations as described in `README.md`, then run
 `npm run test:e2e`. Set `E2E_BASE_URL` to test another running environment.
 Tests create their own groups and delete only those groups at teardown; they
@@ -38,7 +45,7 @@ than replace, the moderated usability study described in `MVP.md`.
 | US-11 | HTTP claim with alias preserves member identity and publishes the alias. |
 | US-12 | HTTP rejects duplicate aliases and leaves the member available. |
 | US-13 | Concurrent independent HTTP contexts produce exactly one claim and one 409. |
-| US-14 | Mobile reload retains the claimed identity through the persistent session cookie. |
+| US-14 | Mobile reload retains the claimed identity through the persistent session cookie, with a clean group URL and no bearer credential in later API requests. |
 | US-15 | HTTP switch releases the old claim and occupies the new claim atomically. |
 | US-16 | Independent browser session cannot reclaim an occupied identity. |
 | US-17 | Creator release makes the identity available and revokes the old session. |

@@ -41,6 +41,38 @@ function creatorPath(created: CreatedGroup, path = "") {
   return `/g${path}${new URL(created.creatorUrl, "http://localhost").hash}`;
 }
 
+async function sessionPrivacy(page: Page, groupId: string, secrets: string[]) {
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        ({ id, tokens }) => {
+          const url = new URL(window.location.href);
+          const storage = JSON.stringify({
+            local: { ...localStorage },
+            session: { ...sessionStorage },
+            history: window.history.state,
+          });
+          return {
+            groupReference: url.searchParams.get("group") === id,
+            hashCleared: url.hash === "",
+            noPersistedSecrets: tokens.every(
+              (secret) =>
+                !storage.includes(secret) && !url.href.includes(secret),
+            ),
+            cookieHiddenFromJavaScript: !document.cookie.includes("appachas_"),
+          };
+        },
+        { id: groupId, tokens: secrets },
+      ),
+    )
+    .toEqual({
+      groupReference: true,
+      hashCleared: true,
+      noPersistedSecrets: true,
+      cookieHiddenFromJavaScript: true,
+    });
+}
+
 async function noHorizontalOverflow(page: Page) {
   const measurement = await page.evaluate(() => ({
     viewport: window.innerWidth,
@@ -336,7 +368,7 @@ test("mobile creator shares the member link and a second device claims a persist
   );
   await page.getByRole("button", { name: "Crear grupo", exact: true }).click();
   const result = await (await creation).json();
-  const creator = groups.register(result.creator_token);
+  const creator = await groups.register(result.creator_token, result.group.id);
 
   // Assert / Then
   await expect(
@@ -353,8 +385,13 @@ test("mobile creator shares the member link and a second device claims a persist
         .getByLabel("Enlace de creador", { exact: true })
         .inputValue()),
   ).toBe(true);
-  await expect(page.getByText(/no (?:lo )?compartas/i)).toBeVisible();
-  await expect(page.getByText(/recuperar|recuperación/i)).toBeVisible();
+  const creatorWarning = page.getByText(/no (?:lo )?compartas/i);
+  await expect(creatorWarning).toBeVisible();
+  await expect(creatorWarning).toContainText(/recuperar|recuperación/i);
+  await sessionPrivacy(page, result.group.id, [
+    result.creator_token,
+    result.member_token,
+  ]);
   await page
     .getByRole("button", {
       name: "Compartir enlace de integrantes",
@@ -409,6 +446,29 @@ test("mobile creator shares the member link and a second device claims a persist
     await expect(
       memberPage.getByRole("link", { name: "Movimientos", exact: true }),
     ).toBeVisible();
+    await sessionPrivacy(memberPage, result.group.id, [
+      result.creator_token,
+      result.member_token,
+    ]);
+    const authenticatedRequests: {
+      authorization: boolean;
+      groupReference: boolean;
+      secretFree: boolean;
+      method: string;
+    }[] = [];
+    memberPage.on("request", (request) => {
+      if (!new URL(request.url()).pathname.startsWith("/api/group")) return;
+      const headers = request.headers();
+      const transport = request.url() + (request.postData() ?? "");
+      authenticatedRequests.push({
+        authorization: Object.hasOwn(headers, "authorization"),
+        groupReference: headers["x-appachas-group"] === result.group.id,
+        secretFree: [result.creator_token, result.member_token].every(
+          (secret) => !transport.includes(secret),
+        ),
+        method: request.method(),
+      });
+    });
     await memberPage.reload();
     await expect(
       memberPage.getByRole("link", { name: "Movimientos", exact: true }),
@@ -419,6 +479,38 @@ test("mobile creator shares the member link and a second device claims a persist
         exact: true,
       }),
     ).toHaveCount(0);
+    await sessionPrivacy(memberPage, result.group.id, [
+      result.creator_token,
+      result.member_token,
+    ]);
+    await memberPage
+      .getByRole("link", { name: "Añadir movimiento", exact: true })
+      .filter({ visible: true })
+      .click();
+    await memberPage.getByLabel("Importe total", { exact: true }).fill("0,01");
+    await memberPage
+      .getByLabel("Concepto", { exact: true })
+      .fill("Sesión con cookie");
+    await memberPage
+      .getByRole("button", { name: "Guardar movimiento", exact: true })
+      .click();
+    await expect(
+      memberPage.getByRole("link", {
+        name: "Editar Sesión con cookie",
+        exact: true,
+      }),
+    ).toBeVisible();
+    expect(
+      authenticatedRequests.some((request) => request.method === "POST"),
+    ).toBe(true);
+    expect(
+      authenticatedRequests.every(
+        (request) =>
+          !request.authorization &&
+          request.groupReference &&
+          request.secretFree,
+      ),
+    ).toBe(true);
     expect((await creator.read()).members[1]).toMatchObject({
       alias: "Bruno 🧉",
       claimed: true,
@@ -429,6 +521,9 @@ test("mobile creator shares the member link and a second device claims a persist
         (cookie) => cookie.httpOnly && cookie.sameSite === "Strict",
       ),
     ).toBe(true);
+    if (new URL(groups.origin).protocol === "https:") {
+      expect(cookies.every((cookie) => cookie.secure)).toBe(true);
+    }
   } finally {
     await context.close();
   }

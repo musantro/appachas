@@ -3,6 +3,7 @@ from psycopg_pool import ConnectionPool
 
 from appachas.contexts.groups.group_creation.application.handler import CreateGroupHandler
 from appachas.contexts.groups.identity_claim.application.handler import ClaimIdentityHandler
+from appachas.contexts.groups.identity_claim.application.session import StartSessionHandler
 from appachas.contexts.groups.lifecycle.application.handlers import (
     CloseGroupHandler,
     EditGroupHandler,
@@ -44,6 +45,7 @@ class Container(containers.DeclarativeContainer):
     uow = providers.Factory(PostgresUnitOfWork)
     create_group = providers.Factory(CreateGroupHandler, clock=clock, tokens=tokens)
     claim_identity = providers.Factory(ClaimIdentityHandler, clock=clock, tokens=tokens)
+    start_session = providers.Factory(StartSessionHandler, clock=clock, tokens=tokens)
     add_member = providers.Factory(AddMemberHandler, clock=clock, tokens=tokens)
     rename_member = providers.Factory(RenameMemberHandler, clock=clock)
     release_member = providers.Factory(ReleaseMemberHandler, clock=clock)

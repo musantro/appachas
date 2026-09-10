@@ -1,9 +1,10 @@
+from dataclasses import asdict
 from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from appachas.contexts.groups.shared.domain.models import Group
+from appachas.contexts.groups.shared.domain.models import Group, Movement
 
 
 class RequestModel(BaseModel):
@@ -84,6 +85,7 @@ class MetadataResponse(ResponseModel):
     version: int
     creator_member_id: str
     members: list[MemberResponse]
+    access_role: Literal["creator", "member"] | None = None
 
     @classmethod
     def from_group(cls, group: Group, today: date):
@@ -116,6 +118,17 @@ class MovementResponse(ResponseModel):
     created_at: datetime
     updated_at: datetime
     version: int
+
+    @classmethod
+    def from_movement(cls, movement: Movement):
+        # Domain and storage keep positive magnitudes. The HTTP presentation
+        # remains signed so history can display refunds without extra arithmetic.
+        data = asdict(movement)
+        sign = -1 if movement.type == "refund" else 1
+        data["amount_cents"] *= sign
+        for allocation in data["allocations"]:
+            allocation["amount_cents"] *= sign
+        return cls.model_validate(data)
 
 
 class BalanceResponse(ResponseModel):

@@ -319,6 +319,21 @@
       },
       "GroupResponse": {
         "properties": {
+          "access_role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "creator",
+                  "member"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Role"
+          },
           "balances": {
             "items": {
               "$ref": "#/components/schemas/BalanceResponse"
@@ -478,6 +493,21 @@
       },
       "MetadataResponse": {
         "properties": {
+          "access_role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "creator",
+                  "member"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Role"
+          },
           "creator_member_id": {
             "title": "Creator Member Id",
             "type": "string"
@@ -1873,6 +1903,84 @@
           }
         },
         "summary": "Edit Movement"
+      }
+    },
+    "/api/group/session": {
+      "post": {
+        "operationId": "start_session_api_group_session_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Start Session"
       }
     },
     "/api/group/settlement": {

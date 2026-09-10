@@ -51,7 +51,7 @@ export function OptionsPage() {
 }
 
 function IdentityOptions({ member }: { member: Member }) {
-  const { group, token } = useGroup();
+  const { group, groupId } = useGroup();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [alias, setAlias] = useState(member.alias);
@@ -59,17 +59,17 @@ function IdentityOptions({ member }: { member: Member }) {
   const [message, setMessage] = useState("");
   const [validation, setValidation] = useState("");
   const rename = useMutation({
-    mutationFn: () => api.renameMember(token, member, alias.trim()),
+    mutationFn: () => api.renameMember(groupId, member, alias.trim()),
     onSuccess: async () => {
       setMessage("Tu alias se ha actualizado para todo el grupo.");
-      await queryClient.invalidateQueries({ queryKey: groupKey(token) });
+      await queryClient.invalidateQueries({ queryKey: groupKey(groupId) });
     },
   });
   const switchIdentity = useMutation({
-    mutationFn: () => api.claim(token, { member_id: target }),
+    mutationFn: () => api.claim(groupId, { member_id: target }),
     onSuccess: (result) => {
-      queryClient.setQueryData(groupKey(token), result.group);
-      navigate(groupPath(token));
+      queryClient.setQueryData(groupKey(groupId), result.group);
+      navigate(groupPath(groupId));
     },
     onError: (error) => {
       if (
@@ -77,7 +77,7 @@ function IdentityOptions({ member }: { member: Member }) {
         error.code === "member_already_claimed"
       ) {
         setTarget("");
-        void queryClient.invalidateQueries({ queryKey: groupKey(token) });
+        void queryClient.invalidateQueries({ queryKey: groupKey(groupId) });
       }
     },
   });
@@ -169,7 +169,7 @@ function IdentityOptions({ member }: { member: Member }) {
 }
 
 function GroupSettings() {
-  const { group, token } = useGroup();
+  const { group, groupId } = useGroup();
   const queryClient = useQueryClient();
   const [name, setName] = useState(group.name);
   const [start, setStart] = useState(group.start_date);
@@ -178,13 +178,13 @@ function GroupSettings() {
   const reachedEnd = group.today >= group.end_date;
   const save = useMutation({
     mutationFn: () =>
-      api.updateGroup(token, {
+      api.updateGroup(groupId, {
         name: name.trim(),
         start_date: start,
         end_date: end,
         version: group.version,
       }),
-    onSuccess: (result) => queryClient.setQueryData(groupKey(token), result),
+    onSuccess: (result) => queryClient.setQueryData(groupKey(groupId), result),
   });
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -249,15 +249,15 @@ function GroupSettings() {
 }
 
 function MemberManagement() {
-  const { group, token } = useGroup();
+  const { group, groupId } = useGroup();
   const queryClient = useQueryClient();
   const [alias, setAlias] = useState("");
   const [validation, setValidation] = useState("");
   const add = useMutation({
-    mutationFn: () => api.addMember(token, alias.trim()),
+    mutationFn: () => api.addMember(groupId, alias.trim()),
     onSuccess: async () => {
       setAlias("");
-      await queryClient.invalidateQueries({ queryKey: groupKey(token) });
+      await queryClient.invalidateQueries({ queryKey: groupKey(groupId) });
     },
   });
   return (
@@ -316,7 +316,7 @@ function MemberManagement() {
 }
 
 function MemberEditor({ member }: { member: Member }) {
-  const { token } = useGroup();
+  const { groupId } = useGroup();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [alias, setAlias] = useState(member.alias);
@@ -324,20 +324,20 @@ function MemberEditor({ member }: { member: Member }) {
     null,
   );
   const rename = useMutation({
-    mutationFn: () => api.renameMember(token, member, alias.trim()),
+    mutationFn: () => api.renameMember(groupId, member, alias.trim()),
     onSuccess: async () => {
       setEditing(false);
-      await queryClient.invalidateQueries({ queryKey: groupKey(token) });
+      await queryClient.invalidateQueries({ queryKey: groupKey(groupId) });
     },
   });
   const action = useMutation({
     mutationFn: async () => {
-      if (confirmation === "remove") await api.removeMember(token, member);
-      else await api.releaseMember(token, member);
+      if (confirmation === "remove") await api.removeMember(groupId, member);
+      else await api.releaseMember(groupId, member);
     },
     onSuccess: async () => {
       setConfirmation(null);
-      await queryClient.invalidateQueries({ queryKey: groupKey(token) });
+      await queryClient.invalidateQueries({ queryKey: groupKey(groupId) });
     },
   });
   return (

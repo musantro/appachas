@@ -9,9 +9,11 @@ from appachas.contexts.groups.identity_claim.public import ClaimIdentity
 from appachas.contexts.groups.movement_management.public import MovementInput
 from appachas.contexts.groups.settlement.public import calculate
 from appachas.contexts.groups.shared.domain.errors import Forbidden
+from appachas.contexts.groups.shared.infrastructure.http.amounts import parse_amount
 from appachas.contexts.groups.shared.infrastructure.http.dependencies import (
     AccessDependency,
-    bearer_token,
+    ClaimAccessDependency,
+    EntryAccessDependency,
     connection,
     cookie_name,
     handler,
@@ -47,7 +49,7 @@ def group_response(group, member_id: str, creator: bool, clock) -> GroupResponse
         **metadata.model_dump(),
         role="creator" if creator else "member",
         my_member_id=member_id,
-        movements=[MovementResponse.model_validate(m) for m in group.movements],
+        movements=[MovementResponse.from_movement(m) for m in group.movements],
         balances=settlement.balances,
         payments=settlement.payments,
         settlement_text=settlement.text,
@@ -58,12 +60,12 @@ def group_response(group, member_id: str, creator: bool, clock) -> GroupResponse
 def movement_input(body: MovementRequest) -> MovementInput:
     return MovementInput(
         body.type,
-        body.amount,
+        parse_amount(body.amount),
         body.concept,
         body.date,
         body.payer_id,
         body.participant_ids,
-        [(a.member_id, a.amount) for a in body.allocations]
+        [(a.member_id, parse_amount(a.amount, allow_zero=True)) for a in body.allocations]
         if body.allocations is not None
         else None,
     )
@@ -77,9 +79,13 @@ def health(current: Annotated[Connection, Depends(connection)]):
 
 @router.post("/api/groups", response_model=CreateGroupResponse, status_code=201)
 def create_group(
-    body: CreateGroupRequest, request: Request, operation=Depends(handler("create_group"))
+    body: CreateGroupRequest,
+    request: Request,
+    response: Response,
+    operation=Depends(handler("create_group")),
 ):
     result = operation.handle(CreateGroup(**body.model_dump()))
+    set_session_cookie(response, request, result.group.id, result.session_token)
     origin = str(request.base_url).rstrip("/")
     return CreateGroupResponse(
         creator_token=result.creator_token,
@@ -91,9 +97,11 @@ def create_group(
 
 
 @router.get("/api/group/metadata", response_model=MetadataResponse)
-def metadata(access: AccessDependency, operation=Depends(handler("read_metadata"))):
-    group = operation.handle(access)
-    return MetadataResponse.from_group(group, operation.clock.today(group.timezone))
+def metadata(access: EntryAccessDependency, operation=Depends(handler("read_metadata"))):
+    view = operation.handle(access)
+    result = MetadataResponse.from_group(view.group, operation.clock.today(view.group.timezone))
+    result.access_role = view.access_role
+    return result
 
 
 @router.get("/api/group", response_model=GroupResponse)
@@ -105,23 +113,42 @@ def read_group(access: AccessDependency, operation=Depends(handler("read_group")
 @router.post("/api/group/claims", response_model=ClaimResponse)
 def claim_identity(
     body: ClaimRequest,
-    access: AccessDependency,
+    access: ClaimAccessDependency,
     request: Request,
     response: Response,
     operation=Depends(handler("claim_identity")),
 ):
     result = operation.handle(ClaimIdentity(access, body.member_id, body.alias))
+    set_session_cookie(response, request, result.group.id, result.session_token)
+    return ClaimResponse(
+        group=group_response(result.group, result.member_id, False, operation.clock)
+    )
+
+
+def set_session_cookie(response: Response, request: Request, group_id: str, session_token: str):
     response.set_cookie(
-        cookie_name(bearer_token(request)),
-        result.session_token,
+        cookie_name(group_id),
+        session_token,
         max_age=366 * 86400,
         httponly=True,
         secure=request.app.state.container.settings().cookie_secure,
         samesite="strict",
         path="/api",
     )
+
+
+@router.post("/api/group/session", response_model=ClaimResponse)
+def start_session(
+    access: EntryAccessDependency,
+    request: Request,
+    response: Response,
+    operation=Depends(handler("start_session")),
+):
+    result = operation.handle(access)
+    if result.session_token:
+        set_session_cookie(response, request, result.group.id, result.session_token)
     return ClaimResponse(
-        group=group_response(result.group, result.member_id, False, operation.clock)
+        group=group_response(result.group, result.member_id, result.is_creator, operation.clock)
     )
 
 
@@ -167,7 +194,7 @@ def delete_member(
 def add_movement(
     body: MovementRequest, access: AccessDependency, operation=Depends(handler("add_movement"))
 ):
-    return operation.handle(access, movement_input(body))
+    return MovementResponse.from_movement(operation.handle(access, movement_input(body)))
 
 
 @router.put("/api/group/movements/{movement_id}", response_model=MovementResponse)
@@ -177,7 +204,9 @@ def edit_movement(
     access: AccessDependency,
     operation=Depends(handler("edit_movement")),
 ):
-    return operation.handle(access, movement_id, movement_input(body), body.version)
+    return MovementResponse.from_movement(
+        operation.handle(access, movement_id, movement_input(body), body.version)
+    )
 
 
 @router.delete("/api/group/movements/{movement_id}", status_code=204)
@@ -207,11 +236,21 @@ def edit_group(
 @router.delete("/api/group", status_code=204)
 def close_group(
     access: AccessDependency,
+    request: Request,
     version: Annotated[int, Query(ge=1)],
     operation=Depends(handler("close_group")),
 ):
     operation.handle(access, version)
-    return Response(status_code=204)
+    response = Response(status_code=204)
+    assert access.group_id is not None
+    response.delete_cookie(
+        cookie_name(access.group_id),
+        path="/api",
+        httponly=True,
+        secure=request.app.state.container.settings().cookie_secure,
+        samesite="strict",
+    )
+    return response
 
 
 @router.get("/api/internal/expire", response_model=ExpiryResponse)

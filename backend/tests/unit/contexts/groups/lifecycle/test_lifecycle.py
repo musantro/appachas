@@ -62,7 +62,7 @@ def test_only_new_movements_renew_activity(action):
     clock = FrozenClock(datetime(2026, 9, 20, 12, tzinfo=UTC))
     data = MovementInput(
         "expense",
-        "10",
+        1000,
         "Hotel",
         date(2026, 9, 15),
         group.members[0].id,

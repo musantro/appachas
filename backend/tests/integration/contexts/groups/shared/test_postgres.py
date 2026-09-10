@@ -14,7 +14,9 @@ from appachas.contexts.groups.identity_claim.application.handler import (
     ClaimIdentity,
     ClaimIdentityHandler,
 )
+from appachas.contexts.groups.identity_claim.application.session import StartSessionHandler
 from appachas.contexts.groups.lifecycle.application.handlers import ExpireGroupsHandler
+from appachas.contexts.groups.member_management.application.handlers import ReleaseMemberHandler
 from appachas.contexts.groups.movement_management.domain.rules import MovementInput, build_movement
 from appachas.contexts.groups.shared.application.ports import Access
 from appachas.contexts.groups.shared.domain.errors import Conflict
@@ -58,12 +60,12 @@ def persisted_group(database):
         uow.repository.delete_group(group.id)
 
 
-def test_group_and_signed_allocations_round_trip_in_normalized_tables(persisted_group):
+def test_group_and_positive_allocations_round_trip_in_normalized_tables(persisted_group):
     # Arrange / Given
     _, connection, group, creator_hash, _ = persisted_group
     data = MovementInput(
         "refund",
-        "10.01",
+        1001,
         "Reserva",
         date(2026, 9, 10),
         group.members[0].id,
@@ -80,6 +82,8 @@ def test_group_and_signed_allocations_round_trip_in_normalized_tables(persisted_
     # Assert / Then
     assert is_creator
     assert restored.movements == [movement]
+    assert restored.movements[0].amount_cents == 1001
+    assert [a.amount_cents for a in restored.movements[0].allocations] == [334, 334, 333]
     assert restored.members == group.members
 
 
@@ -133,7 +137,7 @@ def test_close_removes_group_members_movements_and_allocations(persisted_group):
     _, connection, group, creator_hash, _ = persisted_group
     data = MovementInput(
         "expense",
-        "10",
+        1000,
         "Cena",
         date(2026, 9, 10),
         group.members[0].id,
@@ -188,3 +192,66 @@ def test_expiry_deletes_persisted_group_and_is_idempotent(persisted_group):
     assert removed >= 1
     assert PostgresRepository(connection).get(creator_hash, lock=False) is None
     assert operation.handle() == 0
+
+
+def test_creator_session_is_persisted_as_hash_and_authorizes_without_link(persisted_group):
+    # Arrange / Given
+    _, connection, group, creator_hash, _ = persisted_group
+    operation = StartSessionHandler(
+        lambda: PostgresUnitOfWork(connection), FrozenClock(), SecureTokens()
+    )
+    # Act / When
+    result = operation.handle(Access(creator_hash, group_id=group.id))
+    # Assert / Then
+    row = connection.execute(
+        "SELECT token_hash,role,revoked_at FROM appachas.sessions WHERE group_id=%s", (group.id,)
+    ).fetchone()
+    assert row is not None
+    assert row["role"] == "creator"
+    assert row["revoked_at"] is None
+    assert len(row["token_hash"]) == 64
+    assert result.session_token is not None
+    assert row["token_hash"] != result.session_token
+    actor = PostgresRepository(connection).session_actor(group.id, row["token_hash"])
+    assert actor is not None and actor.is_creator
+
+
+def test_release_revokes_persisted_member_session(persisted_group):
+    # Arrange / Given
+    _, connection, group, creator_hash, member_hash = persisted_group
+    claim = ClaimIdentityHandler(
+        lambda: PostgresUnitOfWork(connection), FrozenClock(), SecureTokens()
+    )
+    claimed = claim.handle(ClaimIdentity(Access(member_hash), group.members[1].id))
+    member = claimed.group.members[1]
+    assert member.session_hash is not None
+    operation = ReleaseMemberHandler(lambda: PostgresUnitOfWork(connection), FrozenClock())
+    # Act / When
+    operation.handle(Access(creator_hash), member.id, member.version)
+    # Assert / Then
+    row = connection.execute(
+        "SELECT revoked_at FROM appachas.sessions WHERE token_hash=%s", (member.session_hash,)
+    ).fetchone()
+    assert row is not None and row["revoked_at"] is not None
+    assert PostgresRepository(connection).session_actor(group.id, member.session_hash) is None
+
+
+def test_group_deletion_cascades_all_sessions(persisted_group):
+    # Arrange / Given
+    _, connection, group, creator_hash, member_hash = persisted_group
+    StartSessionHandler(
+        lambda: PostgresUnitOfWork(connection), FrozenClock(), SecureTokens()
+    ).handle(Access(creator_hash))
+    ClaimIdentityHandler(
+        lambda: PostgresUnitOfWork(connection), FrozenClock(), SecureTokens()
+    ).handle(ClaimIdentity(Access(member_hash), group.members[1].id))
+    # Act / When
+    with PostgresUnitOfWork(connection) as uow:
+        uow.repository.delete_group(group.id)
+    # Assert / Then
+    assert (
+        connection.execute(
+            "SELECT token_hash FROM appachas.sessions WHERE group_id=%s", (group.id,)
+        ).fetchall()
+        == []
+    )

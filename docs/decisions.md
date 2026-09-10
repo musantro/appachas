@@ -3,17 +3,33 @@
 ## Persistent member identity
 
 The owner explicitly approved cookies on 2026-09-10 to improve identity
-persistence. This supersedes the no-cookie statements in `MVP.md`; the
-architecture's HttpOnly cookie approach applies. Only essential first-party
-identity cookies are used. There is no analytics or advertising telemetry.
+persistence. The session contract published in `security-and-sessions.md`
+applies: secret links are exchanged for opaque, revocable server-side sessions.
+Only essential first-party identity cookies are used. There is no analytics or
+advertising telemetry.
 Production cookies use Secure and SameSite=Strict. Clearing browser data still
 requires the creator to release the abandoned claim.
 
 ## Secret links
 
-Group access tokens are placed in the URL fragment and sent to the API in an
-Authorization header. They never appear in HTTP request paths or query strings.
-Only one-way hashes of group and session tokens are persisted in PostgreSQL.
+Group access tokens are placed in the URL fragment and sent in an Authorization
+header only for entry metadata, initial claims and session exchange. After
+exchange, history replacement removes the fragment. Subsequent API requests use
+only the HttpOnly cookie and a non-secret group UUID in `X-Appachas-Group`.
+Tokens never appear in HTTP request paths or query strings. Only one-way hashes
+of group and session tokens are persisted in PostgreSQL. Share links are kept
+only in memory for the current document, never in browser storage or history
+state. After reloading, use the originally saved or shared link to share again.
+
+## Canonical money representation
+
+`algoritmo.md` is normative. Domain objects and PostgreSQL store positive
+movement magnitudes and nonnegative allocations; only the movement type
+determines the sign when calculating balances. Migration `0004` converts the
+previous signed storage without changing balances. The HTTP history DTO uses
+signed refund values for presentation, without mutating the domain objects.
+Invalid persisted movements fail explicitly instead of silently omitting a
+member or returning an unbalanced settlement.
 
 ## Release ownership
 

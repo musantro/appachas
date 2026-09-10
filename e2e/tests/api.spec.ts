@@ -11,6 +11,82 @@ import {
   test,
 } from "../support";
 
+test("initial links exchange for opaque cookies and cannot authorize later operations by themselves", async ({
+  groups,
+}) => {
+  // Arrange / Given
+  const created = await groups.create();
+  const anonymous = await groups.member(created);
+  const creatorToken = new URL(created.creatorUrl, groups.origin).hash.slice(1);
+  await rejected(
+    await anonymous.request.get("/api/group", {
+      headers: {
+        Authorization: `Bearer ${creatorToken}`,
+        "X-Appachas-Group": created.group.id,
+      },
+    }),
+    403,
+    "identity_required",
+  );
+  await rejected(
+    await anonymous.request.get("/api/group", {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+    }),
+    404,
+  );
+  await rejected(
+    await anonymous.request.post("/api/group/claims", {
+      headers: {
+        "X-Appachas-Group": created.group.id,
+        Origin: groups.origin,
+      },
+      data: { member_id: created.group.members[1].id },
+    }),
+    403,
+    "identity_required",
+  );
+
+  // Act / When
+  const response = await anonymous.request.post("/api/group/session", {
+    headers: {
+      Authorization: `Bearer ${creatorToken}`,
+      "X-Appachas-Group": created.group.id,
+      Origin: groups.origin,
+    },
+  });
+  const exchange = await json(response);
+
+  // Assert / Then
+  const cookies = (await anonymous.request.storageState()).cookies;
+  expect(cookies.length).toBe(1);
+  expect(cookies[0].name).toBe(`appachas_${created.group.id}`);
+  expect(cookies[0].httpOnly && cookies[0].sameSite === "Strict").toBe(true);
+  if (new URL(groups.origin).protocol === "https:")
+    expect(cookies[0].secure).toBe(true);
+  const body = JSON.stringify(exchange);
+  expect(
+    [creatorToken, created.memberToken, cookies[0].value].every(
+      (secret) => !body.includes(secret),
+    ),
+  ).toBe(true);
+  expect(exchange.group.role).toBe("creator");
+  const headers = {
+    "X-Appachas-Group": created.group.id,
+    Origin: groups.origin,
+  };
+  const state = await json(
+    await anonymous.request.get("/api/group", { headers }),
+  );
+  expect(state.my_member_id).toBe(created.group.creator_member_id);
+  await json(
+    await anonymous.request.post("/api/group/movements", {
+      headers,
+      data: expenseInput(created.group),
+    }),
+  );
+  expect((await created.creator.read()).movements).toHaveLength(1);
+});
+
 test("one device keeps independent identity cookies for multiple groups", async ({
   groups,
 }) => {
@@ -20,8 +96,9 @@ test("one device keeps independent identity cookies for multiple groups", async 
   const firstClient = await groups.member(first);
   const secondClient = new GroupClient(
     firstClient.request,
-    second.memberToken,
+    second.group.id,
     groups.origin,
+    second.memberToken,
   );
   await firstClient.write("POST", "/claims", {
     member_id: first.group.members[1].id,
@@ -224,8 +301,10 @@ test("creation rejects invalid names, member bounds, dates and timezone", async 
       data: groupInput(fields),
       headers: { Origin: groups.origin },
     });
-    if (response.status() === 201)
-      groups.register((await response.json()).creator_token);
+    if (response.status() === 201) {
+      const unexpected = await response.json();
+      await groups.register(unexpected.creator_token, unexpected.group.id);
+    }
     // Assert / Then
     await rejected(response, 422);
   }
@@ -267,6 +346,9 @@ test("claims persist an optional alias and reject duplicate aliases without taki
   expect(
     cookies.every((cookie) => cookie.httpOnly && cookie.sameSite === "Strict"),
   ).toBe(true);
+  if (new URL(groups.origin).protocol === "https:") {
+    expect(cookies.every((cookie) => cookie.secure)).toBe(true);
+  }
 });
 
 test("simultaneous claims allow exactly one device and reject the other with conflict", async ({

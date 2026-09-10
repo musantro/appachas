@@ -89,18 +89,37 @@ export function groupInput(overrides: Record<string, unknown> = {}) {
 }
 
 export class GroupClient {
+  private identified = false;
+
   constructor(
     readonly request: APIRequestContext,
-    private readonly token: string,
+    readonly groupId: string,
     private readonly origin: string,
+    private readonly token: string,
   ) {}
 
   async response(method: string, path = "", data?: unknown) {
-    return this.request.fetch(`/api/group${path}`, {
+    const entry =
+      path === "/metadata" ||
+      path === "/session" ||
+      (path === "/claims" && !this.identified);
+    const response = await this.request.fetch(`/api/group${path}`, {
       method,
-      headers: { Authorization: `Bearer ${this.token}`, Origin: this.origin },
+      headers: {
+        "X-Appachas-Group": this.groupId,
+        Origin: this.origin,
+        ...(entry ? { Authorization: `Bearer ${this.token}` } : {}),
+      },
       ...(data === undefined ? {} : { data }),
     });
+    if (
+      response.ok() &&
+      (path === "/claims" ||
+        path === "/session" ||
+        (method === "GET" && path === ""))
+    )
+      this.identified = true;
+    return response;
   }
 
   async read(): Promise<Group> {
@@ -164,7 +183,7 @@ export type CreatedGroup = {
 type GroupFactory = {
   create: (overrides?: Record<string, unknown>) => Promise<CreatedGroup>;
   member: (group: CreatedGroup) => Promise<GroupClient>;
-  register: (creatorToken: string) => GroupClient;
+  register: (creatorToken: string, groupId: string) => Promise<GroupClient>;
   origin: string;
 };
 
@@ -175,43 +194,82 @@ export const test = base.extend<{ groups: GroupFactory }>({
     const origin = new URL(baseURL).origin;
     const creators: GroupClient[] = [];
     const contexts: APIRequestContext[] = [];
-    const register = (token: string) => {
-      const creator = new GroupClient(request, token, origin);
+    const register = async (token: string, groupId: string) => {
+      const creator = new GroupClient(request, groupId, origin, token);
       creators.push(creator);
+      await creator.write("POST", "/session");
       return creator;
     };
-    await use({
-      origin,
-      register,
-      async create(overrides = {}) {
-        const response = await request.post("/api/groups", {
-          data: groupInput(overrides),
-          headers: { Origin: origin },
-        });
-        const result = await json(response);
-        const creator = register(result.creator_token);
-        return {
-          creator,
-          group: await creator.read(),
-          creatorUrl: result.creator_url,
-          memberUrl: result.member_url,
-          memberToken: result.member_token,
-        };
-      },
-      async member(group) {
-        const context = await playwright.request.newContext({ baseURL });
-        contexts.push(context);
-        return new GroupClient(context, group.memberToken, origin);
-      },
-    });
-    // Remove only groups created by this scenario; a closed group is already gone.
-    for (const creator of creators) {
-      const response = await creator.response("GET");
-      if (response.status() === 404) continue;
-      const group = await json(response);
-      await json(await creator.response("DELETE", `?version=${group.version}`));
+    const failures: string[] = [];
+    try {
+      await use({
+        origin,
+        register,
+        async create(overrides = {}) {
+          const response = await request.post("/api/groups", {
+            data: groupInput(overrides),
+            headers: { Origin: origin },
+          });
+          const result = await json(response);
+          const creator = await register(result.creator_token, result.group.id);
+          return {
+            creator,
+            group: await creator.read(),
+            creatorUrl: result.creator_url,
+            memberUrl: result.member_url,
+            memberToken: result.member_token,
+          };
+        },
+        async member(group) {
+          const context = await playwright.request.newContext({ baseURL });
+          contexts.push(context);
+          return new GroupClient(
+            context,
+            group.group.id,
+            origin,
+            group.memberToken,
+          );
+        },
+      });
+    } finally {
+      // One failed cleanup must not leave the other test groups or contexts open.
+      for (const [index, creator] of creators.entries()) {
+        let operation = "read";
+        try {
+          const response = await creator.response("GET");
+          if (response.status() === 404) continue;
+          if (!response.ok()) {
+            failures.push(
+              `Group ${index + 1}: read returned HTTP ${response.status()}`,
+            );
+            continue;
+          }
+          const group = await response.json();
+          operation = "delete";
+          const deletion = await creator.response(
+            "DELETE",
+            `?version=${group.version}`,
+          );
+          if (!deletion.ok() && deletion.status() !== 404) {
+            failures.push(
+              `Group ${index + 1}: delete returned HTTP ${deletion.status()}`,
+            );
+          }
+        } catch {
+          // Transport errors may contain Authorization headers; never report them.
+          failures.push(`Group ${index + 1}: ${operation} failed`);
+        }
+      }
+      const disposed = await Promise.allSettled(
+        contexts.map((context) => context.dispose()),
+      );
+      for (const [index, result] of disposed.entries()) {
+        if (result.status === "rejected")
+          failures.push(`Context ${index + 1}: disposal failed`);
+      }
     }
-    for (const context of contexts) await context.dispose();
+    if (failures.length)
+      throw new Error(`Test cleanup incomplete. ${failures.join("; ")}`);
   },
 });
 

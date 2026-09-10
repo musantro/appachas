@@ -1,8 +1,10 @@
+from datetime import datetime
 from typing import Any
 
 from psycopg import Connection
 from psycopg.rows import dict_row
 
+from appachas.contexts.groups.shared.application.ports import Actor, Session
 from appachas.contexts.groups.shared.domain.models import Allocation, Group, Member, Movement
 
 
@@ -77,6 +79,47 @@ class PostgresRepository:
             movements,
             row["last_movement_on"],
             row["version"],
+        )
+
+    def get_by_id(self, group_id: str, *, lock: bool) -> Group | None:
+        lock_clause = "FOR UPDATE" if lock else "FOR SHARE"
+        row = self.connection.execute(
+            "SELECT * FROM appachas.groups WHERE id=%s " + lock_clause, (group_id,)
+        ).fetchone()
+        return self._group(row) if row else None
+
+    def session_actor(self, group_id: str, session_hash: str) -> Actor | None:
+        row = self.connection.execute(
+            """SELECT session.member_id,session.role FROM appachas.sessions AS session
+               JOIN appachas.members AS member ON member.id=session.member_id
+               WHERE session.group_id=%s AND session.token_hash=%s AND session.revoked_at IS NULL
+                 AND ((session.role='creator' AND member.is_creator)
+                   OR (session.role='member' AND NOT member.is_creator
+                       AND member.session_hash=session.token_hash))""",
+            (group_id, session_hash),
+        ).fetchone()
+        return Actor(str(row["member_id"]), row["role"] == "creator") if row else None
+
+    def save_session(self, session: Session) -> None:
+        self.connection.execute(
+            """INSERT INTO appachas.sessions
+               (token_hash,group_id,member_id,role,created_at,revoked_at)
+               VALUES (%s,%s,%s,%s,%s,%s)""",
+            (
+                session.token_hash,
+                session.group_id,
+                session.member_id,
+                "creator" if session.is_creator else "member",
+                session.created_at,
+                session.revoked_at,
+            ),
+        )
+
+    def revoke_member_sessions(self, member_id: str, revoked_at: datetime) -> None:
+        self.connection.execute(
+            """UPDATE appachas.sessions SET revoked_at=%s
+               WHERE member_id=%s AND role='member' AND revoked_at IS NULL""",
+            (revoked_at, member_id),
         )
 
     def create(self, group: Group, creator_hash: str, member_hash: str) -> None:

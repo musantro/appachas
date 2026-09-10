@@ -25,6 +25,7 @@ export type EditMovementInput = JsonRequest<
 export type CreateGroupInput = JsonRequest<paths["/api/groups"]["post"]>;
 export type CreateGroupResult = JsonResponse<paths["/api/groups"]["post"]>;
 export type ClaimResult = JsonResponse<paths["/api/group/claims"]["post"]>;
+export type SessionResult = JsonResponse<paths["/api/group/session"]["post"]>;
 export type Settlement = JsonResponse<paths["/api/group/settlement"]["get"]>;
 
 export class ApiError extends Error {
@@ -41,9 +42,10 @@ export class ApiError extends Error {
 
 async function request<T>(
   path: string,
-  token?: string,
+  groupId?: string,
   method = "GET",
   body?: unknown,
+  entryToken?: string,
 ): Promise<T> {
   let response: Response;
   try {
@@ -51,7 +53,8 @@ async function request<T>(
       method,
       credentials: "same-origin",
       headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(groupId ? { "X-Appachas-Group": groupId } : {}),
+        ...(entryToken ? { Authorization: `Bearer ${entryToken}` } : {}),
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -81,55 +84,76 @@ async function request<T>(
 export const api = {
   createGroup: (input: CreateGroupInput) =>
     request<CreateGroupResult>("/groups", undefined, "POST", input),
-  group: (token: string) => request<Group>("/group", token),
-  metadata: (token: string) => request<Metadata>("/group/metadata", token),
-  claim: (
-    token: string,
+  group: (groupId: string) => request<Group>("/group", groupId),
+  metadata: (entryToken: string) =>
+    request<Metadata>(
+      "/group/metadata",
+      undefined,
+      "GET",
+      undefined,
+      entryToken,
+    ),
+  startSession: (entryToken: string, groupId: string) =>
+    request<SessionResult>(
+      "/group/session",
+      groupId,
+      "POST",
+      undefined,
+      entryToken,
+    ),
+  claimInitial: (
+    entryToken: string,
+    groupId: string,
     input: JsonRequest<paths["/api/group/claims"]["post"]>,
-  ) => request<ClaimResult>("/group/claims", token, "POST", input),
-  createMovement: (token: string, input: MovementInput) =>
-    request<Movement>("/group/movements", token, "POST", input),
-  updateMovement: (token: string, id: string, input: EditMovementInput) =>
+  ) =>
+    request<ClaimResult>("/group/claims", groupId, "POST", input, entryToken),
+  claim: (
+    groupId: string,
+    input: JsonRequest<paths["/api/group/claims"]["post"]>,
+  ) => request<ClaimResult>("/group/claims", groupId, "POST", input),
+  createMovement: (groupId: string, input: MovementInput) =>
+    request<Movement>("/group/movements", groupId, "POST", input),
+  updateMovement: (groupId: string, id: string, input: EditMovementInput) =>
     request<Movement>(
       `/group/movements/${encodeURIComponent(id)}`,
-      token,
+      groupId,
       "PUT",
       input,
     ),
-  deleteMovement: (token: string, id: string, version: number) =>
+  deleteMovement: (groupId: string, id: string, version: number) =>
     request<void>(
       `/group/movements/${encodeURIComponent(id)}?version=${version}`,
-      token,
+      groupId,
       "DELETE",
     ),
   updateGroup: (
-    token: string,
+    groupId: string,
     input: JsonRequest<paths["/api/group"]["put"]>,
-  ) => request<Group>("/group", token, "PUT", input),
-  addMember: (token: string, alias: string) =>
-    request<Member>("/group/members", token, "POST", { alias }),
-  renameMember: (token: string, member: Member, alias: string) =>
+  ) => request<Group>("/group", groupId, "PUT", input),
+  addMember: (groupId: string, alias: string) =>
+    request<Member>("/group/members", groupId, "POST", { alias }),
+  renameMember: (groupId: string, member: Member, alias: string) =>
     request<Member>(
       `/group/members/${encodeURIComponent(member.id)}`,
-      token,
+      groupId,
       "PUT",
       { alias, version: member.version },
     ),
-  removeMember: (token: string, member: Member) =>
+  removeMember: (groupId: string, member: Member) =>
     request<void>(
       `/group/members/${encodeURIComponent(member.id)}?version=${member.version}`,
-      token,
+      groupId,
       "DELETE",
     ),
-  releaseMember: (token: string, member: Member) =>
+  releaseMember: (groupId: string, member: Member) =>
     request<Member>(
       `/group/members/${encodeURIComponent(member.id)}/release`,
-      token,
+      groupId,
       "POST",
       { version: member.version },
     ),
-  settlement: (token: string) =>
-    request<Settlement>("/group/settlement", token),
-  closeGroup: (token: string, version: number) =>
-    request<void>(`/group?version=${version}`, token, "DELETE"),
+  settlement: (groupId: string) =>
+    request<Settlement>("/group/settlement", groupId),
+  closeGroup: (groupId: string, version: number) =>
+    request<void>(`/group?version=${version}`, groupId, "DELETE"),
 };

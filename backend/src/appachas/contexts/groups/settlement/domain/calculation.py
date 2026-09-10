@@ -36,11 +36,37 @@ def calculate(group: Group) -> Settlement:
     amounts = {m.id: 0 for m in members}
     total = 0
     for movement in group.movements:
+        allocations = movement.allocations
+        identifiers = [a.member_id for a in allocations]
+        if (
+            type(movement.amount_cents) is not int
+            or movement.amount_cents <= 0
+            or movement.type not in ("expense", "refund", "contribution")
+            or movement.payer_id not in amounts
+            or not allocations
+            or len(identifiers) != len(set(identifiers))
+            or any(
+                a.member_id not in amounts or type(a.amount_cents) is not int or a.amount_cents < 0
+                for a in allocations
+            )
+            or sum(a.amount_cents for a in allocations) != movement.amount_cents
+            or (movement.type == "contribution" and movement.payer_id in identifiers)
+        ):
+            raise ValueError("Invalid persisted movement")
+        sign = -1 if movement.type == "refund" else 1
+        signed_amount = sign * movement.amount_cents
         if movement.type != "contribution":
-            total += movement.amount_cents
-        amounts[movement.payer_id] += movement.amount_cents
-        for allocation in movement.allocations:
-            amounts[allocation.member_id] -= allocation.amount_cents
+            ordered = [m.id for m in members if m.id in identifiers]
+            base, remainder = divmod(movement.amount_cents, len(ordered))
+            expected = {
+                member_id: base + (index < remainder) for index, member_id in enumerate(ordered)
+            }
+            if any(a.amount_cents != expected[a.member_id] for a in allocations):
+                raise ValueError("Invalid persisted equal allocation")
+            total += signed_amount
+        amounts[movement.payer_id] += signed_amount
+        for allocation in allocations:
+            amounts[allocation.member_id] -= sign * allocation.amount_cents
     balances = [Balance(m.id, m.alias, amounts[m.id]) for m in members]
     positions = {m.id: m.position for m in members}
     debtors = sorted(

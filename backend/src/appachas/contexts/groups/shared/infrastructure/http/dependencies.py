@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 from functools import partial
 from typing import Annotated
+from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
 from fastapi import Depends, Request
@@ -13,8 +14,8 @@ from appachas.infrastructure.bootstrap.adapters import token_hash
 from appachas.infrastructure.bootstrap.container import Container
 
 
-def cookie_name(token: str) -> str:
-    return "appachas_" + token_hash(token)[:16]
+def cookie_name(group_id: str) -> str:
+    return "appachas_" + group_id
 
 
 def bearer_token(request: Request) -> str:
@@ -25,9 +26,30 @@ def bearer_token(request: Request) -> str:
 
 
 def access_context(request: Request) -> Access:
+    group_id = request.headers.get("x-appachas-group")
+    try:
+        group_id = str(UUID(group_id)) if group_id else None
+    except ValueError:
+        raise Unavailable() from None
+    if group_id is None:
+        raise Unavailable()
+    session = request.cookies.get(cookie_name(group_id))
+    return Access(session_hash=token_hash(session) if session else None, group_id=group_id)
+
+
+def entry_access_context(request: Request) -> Access:
     token = bearer_token(request)
-    session = request.cookies.get(cookie_name(token))
-    return Access(token_hash(token), token_hash(session) if session else None)
+    group_id = request.headers.get("x-appachas-group")
+    if group_id:
+        access = access_context(request)
+        return Access(token_hash(token), access.session_hash, access.group_id)
+    return Access(token_hash(token))
+
+
+def claim_access_context(request: Request) -> Access:
+    if request.headers.get("authorization"):
+        return entry_access_context(request)
+    return access_context(request)
 
 
 @inject
@@ -47,3 +69,5 @@ def handler(name: str):
 
 
 AccessDependency = Annotated[Access, Depends(access_context)]
+EntryAccessDependency = Annotated[Access, Depends(entry_access_context)]
+ClaimAccessDependency = Annotated[Access, Depends(claim_access_context)]

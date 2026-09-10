@@ -4,13 +4,14 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ConfirmDialog, Feedback, PageHeading } from "../../components/common";
 import { Button } from "../../components/ui/button";
+import { forgetEntryLinks } from "../../lib/access";
 import { api, type Group } from "../../lib/api";
-import { copyText, forgetSharedLink, money, shareText } from "../../lib/format";
-import { groupKey, metadataKey, useGroup } from "./GroupContext";
+import { copyText, money, shareText } from "../../lib/format";
+import { groupKey, useGroup } from "./GroupContext";
 import { Balances, GroupTabs } from "./GroupPage";
 
 export function SettlementPage() {
-  const { group, token } = useGroup();
+  const { group, groupId } = useGroup();
   const [closedGroup, setClosedGroup] = useState<Group>();
   const [confirm, setConfirm] = useState(false);
   const [message, setMessage] = useState("");
@@ -18,13 +19,12 @@ export function SettlementPage() {
   const [busy, setBusy] = useState(false);
   const queryClient = useQueryClient();
   const close = useMutation({
-    mutationFn: () => api.closeGroup(token, group.version),
+    mutationFn: () => api.closeGroup(groupId, group.version),
     onSuccess: () => {
       setClosedGroup(group);
       setConfirm(false);
-      forgetSharedLink(token);
-      queryClient.removeQueries({ queryKey: metadataKey(token) });
-      void queryClient.cancelQueries({ queryKey: groupKey(token) });
+      forgetEntryLinks(groupId);
+      void queryClient.cancelQueries({ queryKey: groupKey(groupId) });
     },
   });
   const snapshot = closedGroup ?? group;
@@ -149,7 +149,7 @@ export function SettlementPage() {
               <Link
                 to="/"
                 onClick={() =>
-                  queryClient.removeQueries({ queryKey: groupKey(token) })
+                  queryClient.removeQueries({ queryKey: groupKey(groupId) })
                 }
               >
                 Crear un nuevo grupo

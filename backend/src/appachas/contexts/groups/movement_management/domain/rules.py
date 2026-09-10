@@ -1,4 +1,3 @@
-import re
 from dataclasses import dataclass
 from datetime import date, datetime
 
@@ -8,41 +7,32 @@ from appachas.contexts.groups.shared.domain.models import Allocation, Group, Mov
 MAX_CENTS = 999_999_999_999
 
 
-def parse_amount(value: str, *, allow_zero: bool = False) -> int:
-    clean = value.strip().replace(",", ".")
-    if not re.fullmatch(r"(?:[0-9]{1,10}(?:\.[0-9]{1,2})?|\.[0-9]{1,2})", clean):
-        raise invalid(
-            "invalid_amount", "Introduce un importe positivo con hasta dos decimales.", "amount"
-        )
-    whole, _, fraction = clean.partition(".")
-    cents = int(whole or "0") * 100 + int(fraction.ljust(2, "0"))
-    if cents < (0 if allow_zero else 1) or cents > MAX_CENTS:
+def valid_cents(value: int, *, allow_zero: bool = False) -> int:
+    if type(value) is not int or value < (0 if allow_zero else 1) or value > MAX_CENTS:
         raise invalid(
             "invalid_amount",
             "El importe debe ser al menos 0,01 € y estar dentro del límite técnico.",
             "amount",
         )
-    return cents
+    return value
 
 
 def equal_allocations(cents: int, members: list[str]) -> list[Allocation]:
-    quotient, remainder = divmod(abs(cents), len(members))
-    sign = -1 if cents < 0 else 1
+    quotient, remainder = divmod(cents, len(members))
     return [
-        Allocation(member, sign * (quotient + (index < remainder)))
-        for index, member in enumerate(members)
+        Allocation(member, quotient + (index < remainder)) for index, member in enumerate(members)
     ]
 
 
 @dataclass
 class MovementInput:
     type: MovementType
-    amount: str
+    amount_cents: int
     concept: str
     date: date
     payer_id: str
     participant_ids: list[str]
-    allocations: list[tuple[str, str]] | None = None
+    allocations: list[tuple[str, int]] | None = None
 
 
 def build_movement(
@@ -54,7 +44,7 @@ def build_movement(
     identifier: str,
     previous: Movement | None = None,
 ) -> Movement:
-    amount = parse_amount(data.amount)
+    amount = valid_cents(data.amount_cents)
     if data.type not in ("expense", "refund", "contribution"):
         raise invalid("invalid_movement_type", "El tipo de movimiento no es válido.")
     if previous and ((previous.type == "contribution") != (data.type == "contribution")):
@@ -100,10 +90,9 @@ def build_movement(
     ordered = [m.id for m in sorted(group.members, key=lambda m: m.position) if m.id in selected]
     if data.type == "contribution" and data.payer_id in selected:
         raise invalid("source_is_recipient", "El origen no puede ser receptor.", "participant_ids")
-    signed = -amount if data.type == "refund" else amount
     if data.allocations is not None:
         values = {
-            member_id: parse_amount(value, allow_zero=True) for member_id, value in data.allocations
+            member_id: valid_cents(value, allow_zero=True) for member_id, value in data.allocations
         }
         allocations = [Allocation(member_id, values[member_id]) for member_id in ordered]
         if sum(a.amount_cents for a in allocations) != amount:
@@ -113,11 +102,11 @@ def build_movement(
                 "allocations",
             )
     else:
-        allocations = equal_allocations(signed, ordered)
+        allocations = equal_allocations(amount, ordered)
     return Movement(
         identifier,
         data.type,
-        signed,
+        amount,
         concept,
         data.date,
         data.payer_id,

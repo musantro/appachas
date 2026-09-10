@@ -8,9 +8,11 @@ The interface is in Spanish, works from 320 px upward, and follows
 React + TypeScript + Vite, FastAPI + Python 3.13, and PostgreSQL. Production runs
 on Vercel's native Python runtime with static assets on its CDN and Supabase
 PostgreSQL. See [the architecture](docs/code-architecture.md),
-[product requirements](MVP.md), and [implementation decisions](docs/decisions.md).
+[product requirements](MVP.md), [money algorithms](docs/algoritmo.md),
+[session contract](docs/security-and-sessions.md), and
+[implementation decisions](docs/decisions.md).
 The [delivery verification](docs/verification.md) distinguishes completed local
-checks from the production activation still awaiting authorization.
+checks from public production verification.
 
 ## Local development
 
@@ -90,6 +92,9 @@ requires `PRODUCTION_DATABASE_URL`, `VERCEL_TOKEN`, `VERCEL_ORG_ID` and
 `VERCEL_PROJECT_ID` as encrypted Actions secrets. The Vercel token should be
 restricted to this project. Configuration can be prepared from existing linked
 CLI sessions using `scripts/configure-production.mjs`; it never prints secrets.
+If the CLI session cannot create tokens, create a project-scoped token through
+Vercel's Account Tokens dashboard and save it directly as `VERCEL_TOKEN` in
+GitHub Actions secrets; do not paste it into source files or chat.
 
 The daily authenticated `/api/internal/expire` cron physically deletes groups
 after 10 days without a new movement after the end date, with an absolute
@@ -102,9 +107,10 @@ retention belongs to the database provider.
 
 Group links are bearer credentials; share the member link and keep the creator
 link private. Lost creator links cannot be recovered. Tokens use URL fragments
-so they are absent from request paths and referrers. PostgreSQL stores token
-hashes. Identity is remembered with an essential HttpOnly, SameSite=Strict
-cookie (Secure in production), explicitly approved as a change to the original
-MVP. There are no analytics, advertising cookies or third-party fonts.
+only on entry; session exchange removes them from the address bar. Subsequent
+requests use an essential HttpOnly, SameSite=Strict cookie (Secure in production)
+without resending the link. PostgreSQL stores token hashes. Links are never
+persisted in browser storage. There are no analytics, advertising cookies or
+third-party fonts.
 
 MIT licensed. No payment is executed or verified by this application.

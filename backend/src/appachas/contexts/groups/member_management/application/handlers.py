@@ -51,6 +51,7 @@ class ReleaseMemberHandler(Handler):
                 raise Forbidden("creator_identity_fixed", "La identidad del creador es permanente.")
             member.session_hash = None
             member.version += 1
+            uow.repository.revoke_member_sessions(member.id, self.clock.now())
             uow.repository.save_member(group.id, member)
             group.version += 1
             uow.repository.save_group(group)
