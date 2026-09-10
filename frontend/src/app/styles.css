@@ -1014,6 +1014,7 @@
   .site-header {
     padding: 16px;
     min-height: 80px;
+    flex-wrap: wrap;
   }
   .header-note {
     font-size: 12px;
