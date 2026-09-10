@@ -53,7 +53,7 @@ than replace, the moderated usability study described in `MVP.md`.
 | US-19 | Member alias update is visible globally with stable member ID. |
 | US-20 | Creator rename preserves member ID, creation order and claim. |
 | US-21 | HTTP and mobile exercise creator member management without changing links. |
-| US-22 | Member added after an expense has zero balance; old allocations remain unchanged, and edits cannot add that member as payer or participant to an old movement. New movements can include the member. |
+| US-22 | Adding a member leaves the existing allocations and their initial zero balance unchanged. HTTP and mobile editing can include the new member in earlier movements; payer/source and participant/recipient roles are covered with recalculated balances and preserved creation time. |
 | US-23 | HTTP rejects deleting a member referenced by a movement. |
 | US-24 | HTTP deletes an unused claimed member and revokes that member's session. |
 | US-25 | Member HTTP session manages other members' movements and cannot administer the group. |
@@ -97,7 +97,7 @@ than replace, the moderated usability study described in `MVP.md`.
 | US-63 | Mobile shows the same unavailable screen for an invalid or closed link; HTTP returns 404. |
 | US-64 | Backend logging/security tests check credential and product-data exclusion from logs. |
 | US-65 | Mobile observes no third-party network requests or analytics; only first-party session cookies are permitted by the user's explicit persistence decision. |
-| US-66 | Mobile runs axe and 44 px touch-target checks on six primary screens at 320 px, then verifies 200% text enlargement on each screen with maximum-length names, concepts and technical amounts. The creation form also checks keyboard focus and activation. |
+| US-66 | Mobile runs axe and 44 px touch-target checks on six primary screens at 320 px, then verifies 200% text enlargement on each screen with maximum-length names, concepts and technical amounts. Movement form regressions also check unbroken type labels and contained amount/date fields at narrow widths. The creation form checks keyboard focus and activation. |
 
 Acceptance is complete only when the referenced tests pass against the built
 application. This matrix describes test responsibility; it is not a substitute
