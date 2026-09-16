@@ -820,7 +820,20 @@ test("mobile settled groups hide settlement copying and sharing", async ({
   groups,
 }) => {
   // Arrange / Given
-  const created = await groups.create();
+  const created = await groups.create({ members: ["Ana", "Bruno"] });
+  await created.creator.write(
+    "POST",
+    "/movements",
+    expenseInput(created.group, { amount: "60" }),
+  );
+  await created.creator.write("POST", "/movements", {
+    type: "contribution",
+    concept: "Pago compensatorio",
+    date: calendarDate(),
+    amount: "30",
+    payer_id: created.group.members[1].id,
+    allocations: [{ member_id: created.group.members[0].id, amount: "30" }],
+  });
 
   // Act / When
   await page.goto(creatorPath(created, "/settlement"));
@@ -835,6 +848,60 @@ test("mobile settled groups hide settlement copying and sharing", async ({
   await expect(
     page.getByRole("button", { name: "Compartir", exact: true }),
   ).toHaveCount(0);
+});
+
+test("mobile empty settlement guides the first expense and permits deleting the unused group", async ({
+  page,
+  groups,
+}) => {
+  const created = await groups.create();
+  await page.goto(creatorPath(created, "/settlement"));
+  await expect(
+    page.getByRole("heading", { name: "Todavía no hay movimientos" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Todo está saldado", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("¿Habéis terminado?", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Copiar texto", exact: true }),
+  ).toHaveCount(0);
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await accessible(page);
+    await withEnlargedText(page, () => noHorizontalOverflow(page));
+  }
+  await page
+    .getByRole("link", { name: "Añadir primer gasto", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Añadir movimiento", exact: true }),
+  ).toBeVisible();
+  await page.goto(creatorPath(created, "/settlement"));
+  await page
+    .getByRole("button", { name: "Eliminar grupo vacío", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+  expect((await created.creator.read()).movements).toHaveLength(0);
+  await page
+    .getByRole("button", { name: "Eliminar grupo vacío", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Cerrar y eliminar", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Grupo cerrado", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Añadir primer gasto", exact: true }),
+  ).toHaveCount(0);
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: /grupo no disponible/i }),
+  ).toBeVisible();
 });
 
 test("mobile member options change alias and identity while creator options manage the group", async ({

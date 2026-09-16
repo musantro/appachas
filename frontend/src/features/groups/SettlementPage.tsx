@@ -1,12 +1,20 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, Copy, Share2, Wallet } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  Copy,
+  Plus,
+  ReceiptText,
+  Share2,
+  Wallet,
+} from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ConfirmDialog, Feedback, PageHeading } from "../../components/common";
 import { Button } from "../../components/ui/button";
 import { forgetEntryLinks } from "../../lib/access";
 import { api, type Group } from "../../lib/api";
-import { copyText, money, shareText } from "../../lib/format";
+import { copyText, groupPath, money, shareText } from "../../lib/format";
 import { groupKey, useGroup } from "./GroupContext";
 import { Balances, GroupTabs } from "./GroupPage";
 
@@ -28,6 +36,8 @@ export function SettlementPage() {
     },
   });
   const snapshot = closedGroup ?? group;
+  const isEmpty = snapshot.movements.length === 0;
+  const hasPayments = snapshot.payments.length > 0;
   const names = Object.fromEntries(
     snapshot.members.map((member) => [member.id, member.alias]),
   );
@@ -60,7 +70,11 @@ export function SettlementPage() {
         description={
           closedGroup
             ? "Los datos del grupo se han eliminado. Guarda este resumen antes de salir: solo estará visible en esta pantalla."
-            : "Estos son los pagos pendientes para que todo quede saldado."
+            : isEmpty
+              ? "Añade el primer gasto para empezar a repartir las cuentas."
+              : hasPayments
+                ? "Estos son los pagos pendientes para que todo quede saldado."
+                : "Las cuentas del grupo están al día."
         }
       />
       {!closedGroup && <GroupTabs />}
@@ -80,10 +94,30 @@ export function SettlementPage() {
           )}
           <section className="card stack">
             <div className="section-heading mb-0">
-              <h2>Pagos pendientes</h2>
+              <h2>
+                {hasPayments ? "Pagos pendientes" : "Estado de las cuentas"}
+              </h2>
               <Wallet size={20} aria-hidden="true" className="text-primary" />
             </div>
-            {snapshot.payments.length ? (
+            {isEmpty ? (
+              <div className="empty-state">
+                <div className="empty-icon">
+                  <ReceiptText size={28} aria-hidden="true" />
+                </div>
+                <h2>Todavía no hay movimientos</h2>
+                <p>
+                  Cuando apuntéis gastos, aquí veréis quién debe pagar a quién.
+                </p>
+                {!closedGroup && (
+                  <Button asChild>
+                    <Link to={groupPath(groupId, "/movements/new")}>
+                      <Plus size={18} aria-hidden="true" />
+                      Añadir primer gasto
+                    </Link>
+                  </Button>
+                )}
+              </div>
+            ) : hasPayments ? (
               <>
                 <ul className="stack-small" aria-label="Pagos de liquidación">
                   {snapshot.payments.map((payment) => (
@@ -134,13 +168,16 @@ export function SettlementPage() {
           </section>
           {snapshot.role === "creator" && !closedGroup && (
             <section className="card danger-zone mt-0">
-              <h2 className="text-base">¿Habéis terminado?</h2>
+              <h2 className="text-base">
+                {isEmpty ? "¿No vais a usar este grupo?" : "¿Habéis terminado?"}
+              </h2>
               <p className="muted">
-                Cerrar el grupo elimina sus datos y desactiva ambos enlaces.
-                Podrás copiar el resumen en esta pantalla antes de salir.
+                {isEmpty
+                  ? "Puedes eliminar el grupo vacío. Se borrarán sus integrantes y ambos enlaces dejarán de funcionar."
+                  : "Cerrar el grupo elimina sus datos y desactiva ambos enlaces. Podrás copiar el resumen en esta pantalla antes de salir."}
               </p>
               <Button variant="destructive" onClick={() => setConfirm(true)}>
-                Cerrar grupo
+                {isEmpty ? "Eliminar grupo vacío" : "Cerrar grupo"}
               </Button>
             </section>
           )}
@@ -160,7 +197,13 @@ export function SettlementPage() {
         <aside className="stack">
           <section className="card">
             <h2 className="text-base mb-4">Balance de cada persona</h2>
-            <Balances group={snapshot} />
+            {isEmpty ? (
+              <p className="muted">
+                Los balances se calcularán al registrar el primer movimiento.
+              </p>
+            ) : (
+              <Balances group={snapshot} />
+            )}
           </section>
           {closedGroup && (
             <div className="info-card">

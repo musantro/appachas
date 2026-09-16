@@ -203,7 +203,7 @@ La liquidación usa un algoritmo voraz y determinista:
 
 El resultado muestra solo los pagos residuales necesarios. Las aportaciones anteriores se incorporan al cálculo, pero no se detallan de nuevo. Cada línea usa exactamente el formato «Bruno paga 12,50 € a Ana». No se incluye encabezado ni nombre del grupo en el texto copiable.
 
-La pantalla ofrece botones separados de «Copiar texto» y «Compartir» mediante el menú nativo del móvil. Si no quedan pagos pendientes, muestra «Todo está saldado» y no ofrece copiar ni compartir.
+La pantalla ofrece botones separados de «Copiar texto» y «Compartir» mediante el menú nativo del móvil. Si hay movimientos y no quedan pagos pendientes, muestra «Todo está saldado» y no ofrece copiar ni compartir. Si no hay movimientos, muestra «Todavía no hay movimientos» y «Añadir primer gasto», sin presentar el grupo como terminado. El creador conserva una acción secundaria para eliminar el grupo vacío.
 
 ### 6. Pantallas del MVP
 
@@ -405,7 +405,7 @@ El MVP se considera listo cuando:
 - **US-49 — Aportación excesiva:** Como usuario, dado que una aportación supera la deuda actual, cuando la guardo, entonces debe aceptarse y los balances y la liquidación deben recalcularse con el excedente.
 - **US-50 — Liquidación voraz:** Como usuario, dado que hay saldos distintos de cero, cuando abro Liquidación, entonces debo ver una lista determinista de pagos calculada compensando deudores y receptores por importe descendente y desempate por alta.
 - **US-51 — Texto de liquidación:** Como usuario, dado que existen pagos pendientes, cuando consulto el texto, entonces cada línea debe tener el formato «Bruno paga 12,50 € a Ana» sin encabezado ni nombre del grupo.
-- **US-52 — Grupo saldado:** Como usuario, dado que todos los balances son cero, cuando abro Liquidación, entonces debo ver «Todo está saldado» y no debo ver botones de copiar o compartir.
+- **US-52 — Grupo saldado:** Como usuario, dado que existen movimientos y todos los balances son cero, cuando abro Liquidación, entonces debo ver «Todo está saldado» y no debo ver botones de copiar o compartir. Si todavía no hay movimientos, debo ver el estado vacío y una acción para añadir el primer gasto.
 - **US-53 — Copiar liquidación:** Como usuario, dado que existen pagos pendientes, cuando pulso «Copiar texto», entonces el texto de las líneas debe copiarse al portapapeles.
 - **US-54 — Compartir liquidación:** Como usuario, dado que existen pagos pendientes y el dispositivo ofrece menú nativo, cuando pulso «Compartir», entonces debo poder compartir únicamente el texto de liquidación.
 - **US-55 — Evitar sobrescritura:** Como usuario, dado que abrí un movimiento y otra persona lo modificó antes de que yo guardase, cuando intento guardar mi versión antigua, entonces debo recibir `409 Conflict` y no se debe sobrescribir la modificación más reciente.
