@@ -456,7 +456,7 @@ test("mobile creator shares the member link and a second device claims a persist
   ]);
   await page
     .getByRole("button", {
-      name: "Compartir enlace de integrantes",
+      name: "Compartir invitación",
       exact: true,
     })
     .click();
