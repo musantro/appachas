@@ -14,7 +14,7 @@ import {
 import { Link, NavLink } from "react-router-dom";
 import { Avatar, PageHeading } from "../../components/common";
 import { Button } from "../../components/ui/button";
-import type { Group } from "../../lib/api";
+import type { Group, Movement } from "../../lib/api";
 import { calendarDate, dateRange, groupPath, money } from "../../lib/format";
 import { groupKey, useGroup } from "./GroupContext";
 
@@ -77,9 +77,26 @@ export function GroupPage() {
   const { group, groupId } = useGroup();
   const queryClient = useQueryClient();
   const me = group.members.find((member) => member.id === group.my_member_id);
+  const myBalance = group.balances.find(
+    (balance) => balance.member_id === group.my_member_id,
+  );
   const names = Object.fromEntries(
     group.members.map((member) => [member.id, member.alias]),
   );
+  function movementContext(movement: Movement) {
+    const payer = names[movement.payer_id];
+    if (movement.type === "contribution") {
+      const recipients = movement.allocations.map(
+        (allocation) => names[allocation.member_id],
+      );
+      return `${payer} envió a ${new Intl.ListFormat("es").format(recipients)}`;
+    }
+    const count = movement.allocations.length;
+    const split = count === 1 ? "Para 1 persona" : `Entre ${count} personas`;
+    return movement.type === "refund"
+      ? `${payer} recibió la devolución · ${split}`
+      : `Pagó ${payer} · ${split}`;
+  }
   return (
     <>
       <PageHeading
@@ -122,7 +139,23 @@ export function GroupPage() {
               <p className="amount-total" data-testid="group-total">
                 {money(Math.abs(group.total_cents))}
               </p>
-              <p className="muted">Entre todos, todo claro.</p>
+              {myBalance && (
+                <Link
+                  className="personal-balance"
+                  to={groupPath(groupId, "/settlement")}
+                >
+                  <span>
+                    {myBalance.amount_cents > 0
+                      ? `Te deben ${money(myBalance.amount_cents)}`
+                      : myBalance.amount_cents < 0
+                        ? `Debes ${money(-myBalance.amount_cents)}`
+                        : group.movements.length === 0
+                          ? "Tu saldo: 0,00 €"
+                          : "Tu cuenta está saldada"}
+                  </span>
+                  <ChevronRight size={16} aria-hidden="true" />
+                </Link>
+              )}
             </div>
             <Button asChild>
               <Link to={groupPath(groupId, "/movements/new")}>
@@ -172,14 +205,18 @@ export function GroupPage() {
                       className="movement-row"
                       to={groupPath(groupId, `/movements/${movement.id}`)}
                       aria-label={`Editar ${movement.concept || "Aportación"}`}
+                      aria-describedby={`movement-context-${movement.id}`}
                     >
                       <Avatar alias={names[movement.payer_id]} />
                       <div className="movement-info">
                         <h3>{movement.concept || "Aportación"}</h3>
-                        <p>
-                          {names[movement.payer_id]} ·{" "}
-                          {calendarDate(movement.date)}
+                        <p
+                          className="movement-context"
+                          id={`movement-context-${movement.id}`}
+                        >
+                          {movementContext(movement)}
                         </p>
+                        <p>{calendarDate(movement.date)}</p>
                       </div>
                       <div className="movement-amount">
                         <span
