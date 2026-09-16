@@ -7,6 +7,7 @@ import { Button } from "../../components/ui/button";
 import { forgetEntryLinks } from "../../lib/access";
 import { api, type Group } from "../../lib/api";
 import { copyText, money, shareText } from "../../lib/format";
+import { DownloadGroupSummary } from "./DownloadGroupSummary";
 import { groupKey, useGroup } from "./GroupContext";
 import { Balances, GroupTabs } from "./GroupPage";
 
@@ -132,6 +133,7 @@ export function SettlementPage() {
             )}
             <Feedback success={message} error={error} />
           </section>
+          <DownloadGroupSummary group={snapshot} />
           {snapshot.role === "creator" && !closedGroup && (
             <section className="card danger-zone mt-0">
               <h2 className="text-base">¿Habéis terminado?</h2>
