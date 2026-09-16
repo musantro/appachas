@@ -30,7 +30,7 @@ export function CreateGroup() {
     { key: "second", alias: "" },
   ]);
   const [creator, setCreator] = useState("first");
-  const [validation, setValidation] = useState("");
+  const [validation, setValidation] = useState<Record<string, string>>({});
   const create = useMutation({
     mutationFn: api.createGroup,
     onSuccess: (result) => {
@@ -45,22 +45,42 @@ export function CreateGroup() {
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    setValidation("");
+    setValidation({});
+    function invalid(id: string, message: string) {
+      setValidation({ [id]: message });
+      document.getElementById(id)?.focus();
+    }
     const aliases = members.map((member) => member.alias.trim());
-    if (!name.trim()) return setValidation("Escribe un nombre para el grupo.");
-    if (aliases.some((alias) => !alias))
-      return setValidation("Todos los integrantes necesitan un nombre.");
-    if (
-      new Set(aliases.map((alias) => alias.toLocaleLowerCase())).size !==
-      aliases.length
-    )
-      return setValidation(
-        "Los nombres de los integrantes deben ser diferentes.",
+    if (!name.trim() || [...name.trim()].length > 20)
+      return invalid(
+        "group-name",
+        "Escribe un nombre de entre 1 y 20 caracteres.",
       );
-    if (start < localDate() || end <= localDate() || start > end)
-      return setValidation(
+    if (!start || start < localDate())
+      return invalid("start-date", "El inicio debe ser desde hoy.");
+    if (!end || end <= localDate() || start > end)
+      return invalid(
+        "end-date",
         "El inicio debe ser desde hoy y el fin desde mañana, sin ser anterior al inicio.",
       );
+    for (const [index, alias] of aliases.entries()) {
+      if (!alias || [...alias].length > 20)
+        return invalid(
+          `member-${members[index].key}`,
+          "Escribe un nombre de entre 1 y 20 caracteres.",
+        );
+      if (
+        aliases
+          .slice(0, index)
+          .some(
+            (other) => other.toLocaleLowerCase() === alias.toLocaleLowerCase(),
+          )
+      )
+        return invalid(
+          `member-${members[index].key}`,
+          "Los nombres de los integrantes deben ser diferentes.",
+        );
+    }
     create.mutate({
       name: name.trim(),
       start_date: start,
@@ -127,8 +147,13 @@ export function CreateGroup() {
       <section className="card create-card" aria-labelledby="create-title">
         <h2 id="create-title">Empecemos el plan</h2>
         <p className="muted">Crea vuestro grupo en un momento.</p>
-        <form className="stack" onSubmit={submit}>
-          <Field id="group-name" label="Nombre del grupo">
+        <form className="stack" onSubmit={submit} noValidate>
+          <Field
+            id="group-name"
+            label="Nombre del grupo"
+            hint="Máximo 20 caracteres."
+            error={validation["group-name"]}
+          >
             <input
               id="group-name"
               value={name}
@@ -139,7 +164,11 @@ export function CreateGroup() {
             />
           </Field>
           <div className="form-grid">
-            <Field id="start-date" label="Fecha de inicio">
+            <Field
+              id="start-date"
+              label="Fecha de inicio"
+              error={validation["start-date"]}
+            >
               <input
                 id="start-date"
                 type="date"
@@ -149,7 +178,11 @@ export function CreateGroup() {
                 required
               />
             </Field>
-            <Field id="end-date" label="Fecha de fin">
+            <Field
+              id="end-date"
+              label="Fecha de fin"
+              error={validation["end-date"]}
+            >
               <input
                 id="end-date"
                 type="date"
@@ -171,6 +204,8 @@ export function CreateGroup() {
                 <Field
                   id={`member-${member.key}`}
                   label={`Integrante ${index + 1}`}
+                  hint="Máximo 20 caracteres."
+                  error={validation[`member-${member.key}`]}
                 >
                   <input
                     id={`member-${member.key}`}
@@ -253,7 +288,7 @@ export function CreateGroup() {
               podrás cerrar el grupo cuando acabéis.
             </p>
           </div>
-          <Feedback error={validation || create.error} />
+          <Feedback error={create.error} />
           <Button
             type="submit"
             disabled={create.isPending}

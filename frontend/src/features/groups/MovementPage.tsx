@@ -98,6 +98,9 @@ function MovementEditor({
   const [version] = useState(movement?.version);
   const [validation, setValidation] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [validationTarget, setValidationTarget] = useState("");
+  const fieldError = (id: string) =>
+    validationTarget === id ? validation : undefined;
   const total = parseAmount(amount);
   const allocated = participants.reduce(
     (sum, id) => sum + (parseAmount(allocations[id] ?? "") ?? 0),
@@ -152,14 +155,34 @@ function MovementEditor({
   function submit(event: FormEvent) {
     event.preventDefault();
     setValidation("");
+    function invalid(id: string, message: string) {
+      setValidation(message);
+      setValidationTarget(id);
+      document.getElementById(id)?.focus();
+    }
     if (!total)
-      return setValidation(
+      return invalid(
+        "movement-amount",
         "Introduce un importe positivo de al menos 0,01 €, con un máximo de dos decimales.",
       );
-    if (type !== "contribution" && !concept.trim())
-      return setValidation("Escribe un concepto para el movimiento.");
+    if (!date || date > group.today || date > group.end_date)
+      return invalid(
+        "movement-date",
+        "La fecha es obligatoria y no puede ser futura ni posterior al fin del grupo.",
+      );
+    if (
+      (type !== "contribution" && !concept.trim()) ||
+      [...concept.trim()].length > 50
+    )
+      return invalid(
+        "movement-concept",
+        type === "contribution"
+          ? "El concepto puede tener hasta 50 caracteres."
+          : "Escribe un concepto de entre 1 y 50 caracteres.",
+      );
     if (!participants.length)
-      return setValidation(
+      return invalid(
+        "movement-participants",
         type === "contribution"
           ? "Selecciona al menos un receptor."
           : "Selecciona al menos un participante.",
@@ -171,12 +194,9 @@ function MovementEditor({
           (id) => parseAmount(allocations[id] ?? "", true) === null,
         ))
     )
-      return setValidation(
+      return invalid(
+        "movement-participants",
         "Los importes de los receptores deben sumar exactamente el total y no pueden ser negativos.",
-      );
-    if (date > group.today || date > group.end_date)
-      return setValidation(
-        "La fecha no puede ser futura ni posterior al fin del grupo.",
       );
     save.mutate({
       type,
@@ -204,7 +224,7 @@ function MovementEditor({
         description="Apúntalo ahora. Las cuentas se actualizan para todos."
         back={groupPath(groupId)}
       />
-      <form className="card stack" onSubmit={submit}>
+      <form className="card stack" onSubmit={submit} noValidate>
         <fieldset disabled={busy}>
           <legend>Tipo de movimiento</legend>
           <div className="type-selector">
@@ -230,6 +250,7 @@ function MovementEditor({
         <div className="form-grid">
           <Field
             id="movement-amount"
+            error={fieldError("movement-amount")}
             label="Importe total"
             hint="En euros, con coma o punto decimal."
           >
@@ -249,6 +270,7 @@ function MovementEditor({
           </Field>
           <Field
             id="movement-date"
+            error={fieldError("movement-date")}
             label="Fecha"
             hint="También puedes anotar pagos previos al viaje."
           >
@@ -264,6 +286,8 @@ function MovementEditor({
         </div>
         <Field
           id="movement-concept"
+          hint="Máximo 50 caracteres."
+          error={fieldError("movement-concept")}
           label={type === "contribution" ? "Concepto (opcional)" : "Concepto"}
         >
           <input
@@ -303,7 +327,16 @@ function MovementEditor({
           </select>
         </Field>
         <div className="section-divider" />
-        <fieldset>
+        <fieldset
+          id="movement-participants"
+          tabIndex={-1}
+          aria-invalid={!!fieldError("movement-participants") || undefined}
+          aria-describedby={
+            fieldError("movement-participants")
+              ? "movement-participants-error"
+              : undefined
+          }
+        >
           <legend>
             {type === "contribution"
               ? "¿Quién recibe la aportación?"
@@ -358,6 +391,15 @@ function MovementEditor({
                 </div>
               ))}
           </div>
+          {fieldError("movement-participants") && (
+            <p
+              className="field-error"
+              id="movement-participants-error"
+              role="alert"
+            >
+              {fieldError("movement-participants")}
+            </p>
+          )}
         </fieldset>
         {type === "contribution" ? (
           <>
@@ -382,7 +424,7 @@ function MovementEditor({
             </p>
           </div>
         )}
-        <Feedback error={validation || save.error} />
+        <Feedback error={save.error} />
         {conflict && (
           <div className="stack-small">
             <p className="muted">
