@@ -5,7 +5,7 @@ import { Button } from "../../components/ui/button";
 import type { Group } from "../../lib/api";
 import { downloadGroupSummary } from "../../lib/group-summary";
 
-export function DownloadGroupSummary({ group }: { group: Group }) {
+export function SummaryDownload({ group }: { group: Group }) {
   const [error, setError] = useState<unknown>();
   return (
     <section className="card stack-small">
