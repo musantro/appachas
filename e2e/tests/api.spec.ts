@@ -375,7 +375,7 @@ test("creation rejects invalid names, member bounds, dates and timezone", async 
     { members: ["Ana", "x".repeat(21)] },
     { members: ["Ana", "  aNA "] },
     { creator_index: 4 },
-    { start_date: calendarDate(-1) },
+    { start_date: calendarDate(-31) },
     { end_date: calendarDate() },
     { start_date: calendarDate(8), end_date: calendarDate(7) },
     { timezone: "Not/A_Timezone" },
@@ -394,6 +394,19 @@ test("creation rejects invalid names, member bounds, dates and timezone", async 
     // Assert / Then
     await rejected(response, 422);
   }
+});
+
+test("creation accepts a start date at the absolute expiry limit", async ({
+  groups,
+}) => {
+  // Arrange / Given
+  const startDate = calendarDate(-30);
+
+  // Act / When
+  const created = await groups.create({ start_date: startDate });
+
+  // Assert / Then
+  expect(created.group.start_date).toBe(startDate);
 });
 
 test("claims persist an optional alias and reject duplicate aliases without taking the identity", async ({

@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from appachas.contexts.groups.shared.domain.errors import invalid
 
 MovementType = Literal["expense", "refund", "contribution"]
+GROUP_ABSOLUTE_LIMIT_DAYS = 30
 
 
 def valid_name(value: str, field_name: str = "alias", maximum: int = 20) -> str:
@@ -26,7 +27,8 @@ def valid_timezone(value: str) -> str:
 
 
 def valid_dates(start: date, end: date, today: date, *, creating: bool = False) -> None:
-    if start > end or (creating and (start < today or end <= today)):
+    earliest_start = today - timedelta(days=GROUP_ABSOLUTE_LIMIT_DAYS)
+    if start > end or (creating and (start < earliest_start or end <= today)):
         raise invalid("invalid_dates", "Revisa las fechas del grupo.", "end_date")
 
 
@@ -95,7 +97,10 @@ class Group:
 
     def expires_on(self) -> date:
         activity = max(self.end_date, self.last_movement_on or self.end_date)
-        return min(activity + timedelta(days=10), self.end_date + timedelta(days=30))
+        return min(
+            activity + timedelta(days=10),
+            self.end_date + timedelta(days=GROUP_ABSOLUTE_LIMIT_DAYS),
+        )
 
     def expired(self, today: date) -> bool:
         return today >= self.expires_on()

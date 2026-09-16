@@ -34,7 +34,7 @@ Usuario principal: una persona que organiza un viaje o plan y necesita repartir 
 El asistente de creación solicita:
 
 - nombre del grupo, obligatorio, de hasta 20 caracteres;
-- fecha inicial, como mínimo hoy;
+- fecha inicial, como máximo 30 días anterior a hoy;
 - fecha final, como mínimo mañana;
 - entre 2 y 50 integrantes;
 - nombre inicial de cada integrante, obligatorio, de hasta 20 caracteres;
@@ -98,7 +98,7 @@ La existencia del enlace no verifica quién es la persona. Esta advertencia debe
 
 ### 3. Fechas y ciclo de vida
 
-La fecha inicial debe ser hoy o posterior al crear el grupo. La fecha final debe ser posterior a hoy. La fecha del grupo se interpreta siempre en la zona horaria del creador guardada en backend.
+La fecha inicial puede remontarse como máximo 30 días antes de hoy al crear el grupo. La fecha final debe ser posterior a hoy. La fecha del grupo se interpreta siempre en la zona horaria del creador guardada en backend.
 
 Mientras no se haya alcanzado la fecha final, el creador puede modificar el rango. El nuevo rango debe mantener la coherencia temporal y no puede dejar fuera ningún movimiento existente. La fecha final no puede ampliarse ni modificarse una vez alcanzada.
 
@@ -357,7 +357,7 @@ El MVP se considera listo cuando:
 - **US-01 — Crear grupo:** Como creador, dado que estoy en la pantalla de inicio, cuando introduzco un nombre válido, fechas válidas, al menos dos integrantes y mi integrante, entonces debo poder crear el grupo sin registrarme.
 - **US-02 — Validar nombre del grupo:** Como usuario, dado que el nombre está vacío, contiene solo espacios o supera 20 caracteres, cuando intento crear el grupo, entonces debo recibir un error y el grupo no debe crearse.
 - **US-03 — Validar integrantes iniciales:** Como creador, dado que hay menos de dos integrantes, nombres vacíos, nombres de más de 20 caracteres o nombres duplicados ignorando mayúsculas y espacios laterales, cuando intento crear el grupo, entonces debo recibir errores concretos y no debe crearse.
-- **US-04 — Validar fechas de creación:** Como creador, dado que la fecha inicial es anterior a hoy, la fecha final no es posterior a hoy o la fecha inicial es posterior a la final, cuando intento crear el grupo, entonces debo recibir un error y no debe crearse.
+- **US-04 — Validar fechas de creación:** Como creador, dado que la fecha inicial supera los 30 días anteriores a hoy, la fecha final no es posterior a hoy o la fecha inicial es posterior a la final, cuando intento crear el grupo, entonces debo recibir un error y no debe crearse; la fecha límite de hace 30 días debe aceptarse.
 - **US-05 — Guardar zona horaria:** Como creador, dado que creo un grupo desde una zona horaria determinada, cuando el grupo se crea, entonces el backend debe guardar esa zona horaria IANA para calcular fechas, caducidad y “hoy”.
 - **US-06 — Recibir dos enlaces:** Como creador, dado que el grupo se ha creado correctamente, cuando termina el asistente, entonces debo recibir un enlace de integrantes y un enlace de creador independientes.
 - **US-07 — Compartir integrantes:** Como creador, dado que estoy en la pantalla de compartir, cuando pulso compartir el enlace de integrantes, entonces debo poder usar el menú nativo del móvil con un texto que incluya nombre, fechas e instrucciones de identidad.

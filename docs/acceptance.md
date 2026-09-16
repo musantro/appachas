@@ -35,7 +35,7 @@ than replace, the moderated usability study described in `MVP.md`.
 | US-01 | Mobile creation with dates, Unicode members and creator selection; HTTP valid creation. |
 | US-02 | HTTP rejects empty, whitespace and overlong group names. |
 | US-03 | HTTP rejects member bounds, empty/overlong names and case-insensitive duplicates. |
-| US-04 | HTTP rejects past start, nonfuture end and reversed date range. |
+| US-04 | HTTP rejects a start older than 30 days, nonfuture end and reversed date range; accepts the 30-day boundary. |
 | US-05 | HTTP returns the persisted IANA timezone and rejects invalid zones. |
 | US-06 | Mobile presents separate links; HTTP independently authenticates the two credentials. |
 | US-07 | Mobile captures member-sharing text, dates and identity instructions. |

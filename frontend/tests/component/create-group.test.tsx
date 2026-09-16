@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { CreateGroup } from "../../src/features/create/CreateGroup";
 import { ApiError, api } from "../../src/lib/api";
+import { localDate } from "../../src/lib/format";
 
 function renderCreation() {
   return render(
@@ -21,6 +22,17 @@ function renderCreation() {
 }
 
 describe("group creation", () => {
+  it("allows a start date as far back as the absolute expiry limit", () => {
+    // Arrange / Given
+    renderCreation();
+
+    // Assert / Then
+    expect(screen.getByLabelText("Fecha de inicio")).toHaveAttribute(
+      "min",
+      localDate(-30),
+    );
+  });
+
   it("rejects duplicate aliases ignoring case and surrounding spaces before submitting", async () => {
     // Arrange / Given
     const user = userEvent.setup();

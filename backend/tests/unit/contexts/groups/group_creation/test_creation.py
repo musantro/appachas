@@ -36,7 +36,7 @@ def creation(**changes):
         {"members": ["Ana", "a" * 21]},
         {"creator_index": 2},
         {"timezone": "not/a-timezone"},
-        {"start_date": date(2026, 9, 9)},
+        {"start_date": date(2026, 8, 10)},
         {"end_date": date(2026, 9, 10)},
         {"start_date": date(2026, 9, 16)},
     ],
@@ -65,6 +65,16 @@ def test_creator_is_claimed_and_tokens_are_independent():
     assert result.group.members[0].claimed
     assert not result.group.members[1].claimed
     assert result.group.timezone == "Europe/Madrid"
+
+
+def test_creation_allows_start_at_the_absolute_expiry_limit():
+    # Arrange / Given
+    repository = MemoryRepository(GroupMother.with_members())
+    handler = CreateGroupHandler(repository.unit_of_work, FrozenClock(), FakeTokens())
+    # Act / When
+    result = handler.handle(creation(start_date=date(2026, 8, 11)))
+    # Assert / Then
+    assert result.group.start_date == date(2026, 8, 11)
 
 
 def test_creation_today_uses_creator_timezone():

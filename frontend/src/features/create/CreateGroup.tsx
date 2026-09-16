@@ -57,9 +57,9 @@ export function CreateGroup() {
       return setValidation(
         "Los nombres de los integrantes deben ser diferentes.",
       );
-    if (start < localDate() || end <= localDate() || start > end)
+    if (start < localDate(-30) || end <= localDate() || start > end)
       return setValidation(
-        "El inicio debe ser desde hoy y el fin desde mañana, sin ser anterior al inicio.",
+        "El inicio no puede ser de hace más de 30 días y el fin debe ser desde mañana, sin ser anterior al inicio.",
       );
     create.mutate({
       name: name.trim(),
@@ -144,7 +144,7 @@ export function CreateGroup() {
                 id="start-date"
                 type="date"
                 value={start}
-                min={localDate()}
+                min={localDate(-30)}
                 onChange={(event) => setStart(event.target.value)}
                 required
               />
