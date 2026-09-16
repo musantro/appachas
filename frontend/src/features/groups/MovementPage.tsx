@@ -405,6 +405,7 @@ function MovementEditor({
               onClick={() => {
                 redistribute(participants);
                 setManualSplit(false);
+                setValidation("");
               }}
             >
               Repartir por igual
