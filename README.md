@@ -90,6 +90,8 @@ On pull requests and `master`, it also migrates an isolated PostgreSQL 17 servic
 and runs all integration and browser acceptance tests. Only `master`, after
 these checks pass, can migrate production,
 deploy the tested source to Vercel, and verify the published API and static app.
+The [GitHub Actions security controls](docs/github-actions-security.md) document
+the required action pinning, production approvals and branch protection.
 
 `npm run build:production` builds from an explicit allowlist in an isolated
 temporary directory and verifies the resulting Python package. This prevents
