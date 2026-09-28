@@ -1,9 +1,10 @@
-import { ArrowRight, Check, Copy, Info, KeyRound, Share2 } from "lucide-react";
+import { ArrowRight, Check, Copy, Download, Info, Share2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Feedback, Field, PageHeading } from "../../components/common";
 import { Button } from "../../components/ui/button";
 import { entryLinks } from "../../lib/access";
+import { downloadPrivateAccess } from "../../lib/access-download";
 import { copyText, dateRange, groupPath, shareText } from "../../lib/format";
 import { useGroup } from "./GroupContext";
 
@@ -12,19 +13,31 @@ export function SharePage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState<unknown>();
   const [busy, setBusy] = useState(false);
+  const [feedbackTarget, setFeedbackTarget] = useState("member");
   const { creatorUrl, memberUrl } = entryLinks(groupId);
   const text = `${group.name} · ${dateRange(group.start_date, group.end_date)}\nVamos a llevar las cuentas en Appachas. Abre el enlace y elige tu nombre para entrar al grupo:\n${memberUrl ?? ""}`;
-  async function perform(action: "share" | "copy-member" | "copy-creator") {
+  async function perform(
+    action: "share" | "copy-member" | "copy-creator" | "download",
+  ) {
+    setFeedbackTarget(
+      action === "download" || action === "copy-creator" ? "creator" : "member",
+    );
     setError(undefined);
     setMessage("");
     setBusy(true);
     try {
-      if (action === "share") {
+      if (action === "download" && creatorUrl) {
+        downloadPrivateAccess(group.name, creatorUrl);
+        setMessage(
+          "Descarga iniciada. Comprueba que tienes appachas-acceso-privado.txt en tus descargas y guárdalo en un lugar privado.",
+        );
+      } else if (action === "share") {
         const result = await shareText(text);
         if (result === "copied")
           setMessage(
             "El texto y el enlace se han copiado. Pégalos en vuestro chat.",
           );
+        if (result === "shared") setMessage("Invitación compartida.");
       } else {
         await copyText(
           action === "copy-creator" ? (creatorUrl ?? "") : (memberUrl ?? ""),
@@ -37,7 +50,9 @@ export function SharePage() {
       }
     } catch {
       setError(
-        "No se pudo compartir o copiar. Puedes seleccionar el enlace y copiarlo manualmente.",
+        action === "download"
+          ? "No se pudo descargar. Copia el enlace de creador y guárdalo en un lugar privado."
+          : "No se pudo compartir o copiar. Puedes seleccionar el enlace y copiarlo manualmente.",
       );
     } finally {
       setBusy(false);
@@ -55,17 +70,24 @@ export function SharePage() {
       <div className="stack">
         {(memberUrl || creatorUrl) && (
           <p className="notice">
-            Guarda los enlaces antes de recargar o cerrar esta pestaña. Appachas
-            no los guarda en el navegador y no puede recuperarlos.
+            Antes de recargar o cerrar:{" "}
+            {memberUrl && creatorUrl
+              ? "comparte la invitación y descarga tu acceso privado."
+              : creatorUrl
+                ? "descarga tu acceso privado."
+                : "comparte o guarda la invitación."}{" "}
+            Los enlaces no se podrán mostrar de nuevo aquí.
           </p>
         )}
         <section className="card stack">
           <div>
-            <h2>Invita al resto</h2>
-            <p className="muted mt-2">
-              Comparte este enlace en vuestro chat. Cada integrante podrá elegir
-              su identidad y apuntar movimientos.
-            </p>
+            <h2>{group.role === "creator" ? "1. " : ""}Invita al grupo</h2>
+            {memberUrl && (
+              <p className="muted mt-2">
+                Comparte este enlace en vuestro chat. Cada integrante podrá
+                elegir su identidad y apuntar movimientos.
+              </p>
+            )}
           </div>
           {memberUrl ? (
             <>
@@ -80,7 +102,7 @@ export function SharePage() {
               <div className="link-actions">
                 <Button disabled={busy} onClick={() => void perform("share")}>
                   <Share2 size={17} aria-hidden="true" />
-                  Compartir enlace de integrantes
+                  Compartir invitación
                 </Button>
                 <Button
                   variant="outline"
@@ -88,16 +110,19 @@ export function SharePage() {
                   onClick={() => void perform("copy-member")}
                 >
                   <Copy size={17} aria-hidden="true" />
-                  Copiar enlace de integrantes
+                  Copiar invitación
                 </Button>
               </div>
             </>
           ) : (
             <p className="notice">
-              El enlace de integrantes se mostró al crear el grupo. No se guarda
-              en el navegador. Puedes recuperarlo del chat en el que lo
-              compartisteis.
+              La invitación ya no está disponible aquí. Si la compartiste,
+              búscala en vuestro chat y reenvíala desde allí. Appachas no puede
+              recuperarla ni crear otra.
             </p>
+          )}
+          {feedbackTarget === "member" && (
+            <Feedback success={message} error={error} />
           )}
           <div className="info-inline">
             <Info size={18} aria-hidden="true" />
@@ -110,17 +135,31 @@ export function SharePage() {
         {group.role === "creator" && (
           <section className="card stack">
             <div className="card-title mb-0">
-              <KeyRound size={22} aria-hidden="true" />
-              <h2 className="text-base">Tu enlace de creador</h2>
+              <h2>
+                {creatorUrl ? "2. Guarda tu acceso" : "2. Tu acceso privado"}
+              </h2>
               <span className="badge badge-neutral">Privado</span>
             </div>
             <p className="notice">
-              No lo compartas. Este enlace permite administrar y cerrar el
-              grupo. Guárdalo: si lo pierdes, no se puede recuperar ni
-              regenerar.
+              No lo compartas: permite administrar y cerrar el grupo.{" "}
+              {creatorUrl
+                ? "Descarga el archivo y consérvalo en un lugar privado."
+                : "Conserva tu copia en un lugar privado."}{" "}
+              Si pierdes el enlace, no se puede recuperar ni regenerar.
             </p>
             {creatorUrl ? (
               <>
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void perform("download")}
+                >
+                  <Download size={17} aria-hidden="true" />
+                  Descargar acceso privado
+                </Button>
+                {feedbackTarget === "creator" && (
+                  <Feedback success={message} error={error} />
+                )}
                 <Field id="creator-link" label="Enlace de creador">
                   <input
                     id="creator-link"
@@ -140,14 +179,14 @@ export function SharePage() {
               </>
             ) : (
               <p className="muted">
-                Este enlace solo está disponible al crear el grupo o al abrir el
-                enlace privado original. Usa la copia que guardaste; tu sesión
-                actual sigue funcionando.
+                Tu sesión actual sigue funcionando. Para entrar desde otro
+                navegador, busca appachas-acceso-privado.txt en tus descargas o
+                la copia del enlace que guardaste. Al abrir ese enlace podrás
+                descargarlo de nuevo. Sin una copia no se puede recuperar.
               </p>
             )}
           </section>
         )}
-        <Feedback success={message} error={error} />
         <Button asChild variant="outline" className="full-width">
           <Link to={groupPath(groupId)}>
             Ir al grupo
