@@ -422,6 +422,18 @@
     font-weight: 700;
     line-height: 16px;
   }
+  .field-error {
+    color: var(--color-error-text);
+    font-size: 14px;
+    line-height: 21px;
+  }
+
+  input[aria-invalid="true"] {
+    background: var(--color-error-soft);
+    color: var(--color-error-text);
+    border-color: var(--color-error);
+  }
+
   .field-hint {
     font-size: 12px;
     line-height: 16px;

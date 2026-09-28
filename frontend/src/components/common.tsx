@@ -1,5 +1,12 @@
 import { AlertCircle, ArrowLeft, Check, LoaderCircle, X } from "lucide-react";
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  type ReactNode,
+  useEffect,
+  useId,
+  useRef,
+} from "react";
 import { Link } from "react-router-dom";
 import { initials } from "../lib/format";
 import { Button } from "./ui/button";
@@ -98,20 +105,42 @@ export function Field({
   label,
   id,
   hint,
+  error,
   children,
 }: {
   label: string;
   id: string;
   hint?: string;
+  error?: string;
   children: ReactNode;
 }) {
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
-      {children}
+      {isValidElement<{
+        "aria-describedby"?: string;
+        "aria-invalid"?: boolean;
+      }>(children)
+        ? cloneElement(children, {
+            "aria-describedby":
+              [
+                children.props["aria-describedby"],
+                hint && `${id}-hint`,
+                error && `${id}-error`,
+              ]
+                .filter(Boolean)
+                .join(" ") || undefined,
+            "aria-invalid": error ? true : children.props["aria-invalid"],
+          })
+        : children}
       {hint && (
         <p className="field-hint" id={`${id}-hint`}>
           {hint}
+        </p>
+      )}
+      {error && (
+        <p className="field-error" id={`${id}-error`} role="alert">
+          {error}
         </p>
       )}
     </div>
