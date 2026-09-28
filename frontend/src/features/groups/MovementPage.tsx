@@ -96,6 +96,9 @@ function MovementEditor({
     ),
   );
   const [version] = useState(movement?.version);
+  const [manualSplit, setManualSplit] = useState(
+    movement?.type === "contribution",
+  );
   const [validation, setValidation] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const total = parseAmount(amount);
@@ -131,6 +134,7 @@ function MovementEditor({
     if (next === "contribution" && type !== "contribution") {
       setParticipants([]);
       setAllocations({});
+      setManualSplit(false);
     }
     if (next !== "contribution" && type === "contribution")
       setParticipants(group.members.map((member) => member.id));
@@ -142,12 +146,20 @@ function MovementEditor({
       .map((member) => member.id);
     setAllocations(equalAmounts(parseAmount(nextAmount) ?? 0, ordered));
   }
+  function updateSplit(ids: string[], nextAmount = amount) {
+    if (!manualSplit) return redistribute(ids, nextAmount);
+    // Keep drafts when a recipient is deselected; only selected amounts count.
+    setAllocations((current) => ({
+      ...Object.fromEntries(ids.map((id) => [id, "0,00"])),
+      ...current,
+    }));
+  }
   function toggleParticipant(id: string) {
     const next = participants.includes(id)
       ? participants.filter((item) => item !== id)
       : [...participants, id];
     setParticipants(next);
-    if (type === "contribution") redistribute(next);
+    if (type === "contribution") updateSplit(next);
   }
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -240,7 +252,7 @@ function MovementEditor({
               onChange={(event) => {
                 setAmount(event.target.value);
                 if (type === "contribution")
-                  redistribute(participants, event.target.value);
+                  updateSplit(participants, event.target.value);
               }}
               required
               placeholder="0,00"
@@ -291,7 +303,7 @@ function MovementEditor({
               if (type === "contribution") {
                 const next = participants.filter((id) => id !== nextPayer);
                 setParticipants(next);
-                redistribute(next);
+                updateSplit(next);
               }
             }}
           >
@@ -345,12 +357,13 @@ function MovementEditor({
                           id={`allocation-${member.id}`}
                           inputMode="decimal"
                           value={allocations[member.id] ?? ""}
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            setManualSplit(true);
                             setAllocations({
                               ...allocations,
                               [member.id]: event.target.value,
-                            })
-                          }
+                            });
+                          }}
                           required
                         />
                       </div>
@@ -367,10 +380,36 @@ function MovementEditor({
                 {money(allocated)} / {money(total ?? 0)}
               </strong>
             </div>
-            <p className="field-hint">
-              Se reparte por igual al seleccionar receptores. Puedes ajustar
-              cada importe; la suma debe coincidir con el total.
+            <p className="field-hint" role="status">
+              {participants.some(
+                (id) => parseAmount(allocations[id] ?? "", true) === null,
+              )
+                ? "Revisa los importes: usa cero o un número positivo con hasta dos decimales."
+                : !total
+                  ? "Introduce un importe total válido para comprobar el reparto."
+                  : allocated < total
+                    ? `Faltan ${money(total - allocated)} por repartir.`
+                    : allocated > total
+                      ? `Sobran ${money(allocated - total)} en el reparto.`
+                      : "El reparto coincide con el total."}
             </p>
+            <p className="field-hint">
+              {manualSplit
+                ? "Tus importes se conservan al cambiar el total o los receptores. Los nuevos empiezan en 0 €."
+                : "Se reparte por igual automáticamente hasta que ajustes un importe."}
+            </p>
+            <Button
+              variant="outline"
+              type="button"
+              disabled={busy || !total || !participants.length}
+              onClick={() => {
+                redistribute(participants);
+                setManualSplit(false);
+                setValidation("");
+              }}
+            >
+              Repartir por igual
+            </Button>
           </>
         ) : (
           <div className="info-inline">

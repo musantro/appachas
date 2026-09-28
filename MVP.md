@@ -155,7 +155,9 @@ El historial mezcla tres tipos de movimiento y los identifica con una etiqueta:
 - el origen no puede ser receptor;
 - primero se introduce el importe total positivo;
 - al seleccionar receptores se reparte por defecto a partes iguales;
-- los importes individuales se pueden modificar;
+- los importes individuales se pueden modificar; desde la primera edición manual se conservan al cambiar el total, origen o receptores, y los receptores nuevos empiezan en cero;
+- al editar una aportación existente se conservan sus asignaciones; «Repartir por igual» permite volver explícitamente al reparto automático;
+- se muestra cuánto falta o sobra para que la suma coincida con el total;
 - al guardar, la suma de las asignaciones debe coincidir exactamente con el total;
 - una aportación puede ser de una persona a una o varias personas;
 - una aportación no se puede convertir en gasto o reembolso, ni estos en aportación.
