@@ -608,6 +608,19 @@
     margin: 8px 0;
     overflow-wrap: anywhere;
   }
+  .personal-balance {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    color: var(--color-primary);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .personal-balance > svg {
+    flex-shrink: 0;
+  }
   .amount {
     font-family: var(--font-display);
     font-size: 18px;
@@ -672,6 +685,10 @@
     color: var(--color-muted);
     margin-top: 4px;
     overflow-wrap: anywhere;
+  }
+  .movement-info .movement-context {
+    font-size: 14px;
+    line-height: 21px;
   }
   .movement-amount {
     display: grid;
