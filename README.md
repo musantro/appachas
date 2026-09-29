@@ -82,6 +82,11 @@ The generated API schema is `backend/openapi.json`, and the frontend consumes
 `frontend/src/lib/api.generated.ts`. Regenerate both after contract changes;
 the pipeline rejects uncommitted generated changes.
 
+## Contributing
+
+Make changes on a dedicated branch and submit a pull request against `master`.
+Run the relevant checks locally, and ensure GitHub Actions passes before merge.
+
 ## Production and CI/CD
 
 [GitHub Actions](.github/workflows/ci.yml) checks formatting, linting, Python and
