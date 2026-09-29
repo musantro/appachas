@@ -50,12 +50,12 @@ base y revoca `ALL` del esquema y de sus tablas para `PUBLIC`. Las migraciones
 habilitan RLS en sus tablas nuevas. No hay `CREATE POLICY`, `ALTER TABLE ...
 FORCE ROW LEVEL SECURITY`, `GRANT` de runtime ni `ALTER DEFAULT PRIVILEGES`.
 
-RLS sin políticas no constituye una autorización de filas para roles con
-privilegios de tabla. Además, el propietario de una tabla normalmente evita
-RLS salvo que se fuerce, y un rol con `BYPASSRLS` siempre lo evita. Hay que
-confirmar esto en el proyecto enlazado antes de decidir si el modelo debe
-seguir siendo autorización en la aplicación o migrar a un rol no propietario
-con contexto de sesión.
+RLS sin políticas aplica denegación por defecto a roles sujetos a RLS, por lo
+que tampoco expresa el modelo de acceso requerido por Appachas. Además, el
+propietario de una tabla normalmente evita RLS salvo que se fuerce, y un rol
+con `BYPASSRLS` siempre lo evita. Hay que confirmar esto en el proyecto
+enlazado antes de decidir si el modelo debe seguir siendo autorización en la
+aplicación o migrar a un rol no propietario con contexto de sesión.
 
 ### Consulta remota de verificación (solo lectura)
 
