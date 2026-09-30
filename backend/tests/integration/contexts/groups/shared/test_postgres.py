@@ -44,6 +44,50 @@ def database():
         yield url, connection
 
 
+def test_alembic_metadata_is_not_exposed_by_default(database):
+    _, connection = database
+    table = connection.execute(
+        """
+        SELECT c.relrowsecurity
+        FROM pg_class AS c
+        JOIN pg_namespace AS n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relname = 'alembic_version'
+        """
+    ).fetchone()
+    assert table is not None and table["relrowsecurity"]
+
+    public_privileges = connection.execute(
+        """
+        SELECT count(*) AS privilege_count
+        FROM pg_class AS c
+        JOIN pg_namespace AS n ON n.oid = c.relnamespace
+        CROSS JOIN LATERAL aclexplode(
+            COALESCE(c.relacl, acldefault('r', c.relowner))
+        ) AS acl
+        WHERE n.nspname = 'public'
+          AND c.relname = 'alembic_version'
+          AND acl.grantee = 0
+        """
+    ).fetchone()
+    assert public_privileges is not None
+    assert public_privileges["privilege_count"] == 0
+
+    public_default_privileges = connection.execute(
+        """
+        SELECT count(*) AS privilege_count
+        FROM pg_default_acl AS d
+        JOIN pg_namespace AS n ON n.oid = d.defaclnamespace
+        CROSS JOIN LATERAL aclexplode(d.defaclacl) AS acl
+        WHERE d.defaclrole = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+          AND n.nspname = 'public'
+          AND d.defaclobjtype = 'r'
+          AND acl.grantee = 0
+        """
+    ).fetchone()
+    assert public_default_privileges is not None
+    assert public_default_privileges["privilege_count"] == 0
+
+
 @pytest.fixture
 def persisted_group(database):
     url, connection = database

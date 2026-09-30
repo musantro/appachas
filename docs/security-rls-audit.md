@@ -1,179 +1,163 @@
 # APP-5 — Revisión de RLS y superficies de acceso
 
-**Fecha de revisión:** 2026-09-29
+**Fecha de revisión:** 2026-09-30
 
-**Alcance:** checkout local de Appachas, rama `APP-5`, y comprobaciones HTTP
-anónimas contra `https://appachas.es`. No se leyeron datos de grupos ni datos
-personales de producción.
+**Alcance:** rama `APP-5`, comprobaciones HTTP anónimas contra producción y
+catálogo remoto de Supabase mediante el endpoint oficial de consultas de solo
+lectura. La consulta se ejecutó como `supabase_read_only_user`, con
+`transaction_read_only=on`; no leyó filas de negocio, hashes ni datos
+personales.
 
 ## Resultado ejecutivo
 
-- El repositorio declara seis tablas en `appachas`: `groups`, `members`,
-  `movements`, `movement_allocations`, `sessions` y `session_migrations`.
-- Las migraciones habilitan RLS en las seis tablas y revocan los privilegios de
-  `PUBLIC`, pero no declaran ninguna `CREATE POLICY`.
-- El backend usa una conexión directa a PostgreSQL y aplica la autorización en
-  la aplicación mediante hashes de enlaces y sesiones. No establece un
-  contexto PostgreSQL/JWT que permita escribir políticas correctas con la
-  información disponible.
-- No hay declaraciones de vistas, funciones ni procedimientos SQL en el
-  repositorio. La existencia de objetos adicionales en el proyecto Supabase
-  remoto sigue sin verificarse porque este checkout no tiene Supabase CLI,
-  cliente `psql` ni `DATABASE_URL`.
-- **No se aplicó una migración de políticas.** Crear políticas genéricas o
-  activar `FORCE ROW LEVEL SECURITY` sin conocer el rol de runtime, sus
-  privilegios y el contexto de sesión podría bloquear el backend o abrir datos.
+- Producción contiene las seis tablas esperadas en `appachas`: `groups`,
+  `members`, `movements`, `movement_allocations`, `sessions` y
+  `session_migrations`. Todas tienen RLS habilitado, ninguna fuerza RLS y todas
+  pertenecen a `postgres`.
+- `anon`, `authenticated`, `authenticator` y `service_role` no tienen `USAGE`
+  sobre `appachas` ni privilegios de tabla sobre esos seis objetos. No existen
+  vistas, rutinas ni políticas en `appachas` o `public`.
+- Una petición real a `/api/health` dejó una conexión `postgres` con
+  `application_name=Supavisor`. `postgres` es propietario y tiene `BYPASSRLS`,
+  por lo que RLS no protege el acceso del backend. La autorización de grupos se
+  aplica deliberadamente en la aplicación mediante enlaces y sesiones.
+- Se encontró una superficie distinta y accionable: `public.alembic_version`
+  tenía RLS desactivado y CRUD concedido a `anon`, `authenticated` y
+  `service_role` por los privilegios predeterminados de Supabase para `public`.
+- La migración `0006` habilita RLS en `public.alembic_version`, revoca todos sus
+  privilegios públicos y de roles Data API, y endurece los privilegios
+  predeterminados de tablas `public` creadas por el rol de migración.
 
-La issue debe permanecer abierta para la verificación remota y el diseño de
-políticas con evidencia del rol efectivo.
+No se añaden políticas de usuario final a `appachas`: esos roles no pueden
+alcanzar el esquema y el backend no aporta identidad PostgreSQL/JWT por grupo.
+Una política inventada no se ejecutaría para el rol real y daría una falsa
+sensación de aislamiento.
 
-## Inventario del repositorio
+## Inventario y sensibilidad
 
-| Objeto | Datos sensibles | Acceso de aplicación | Riesgo si la conexión evita RLS |
-| --- | --- | --- | --- |
-| `groups` | nombre, fechas, zona horaria, hashes de enlaces | enlace de creador/miembro o sesión por `group_id` | exposición del grupo completo y de hashes |
-| `members` | alias, orden, `session_hash` | se carga junto al grupo autorizado | exposición de identidades y hashes |
-| `movements` | conceptos, importes, fechas, pagador | sesión válida del grupo | exposición de actividad financiera |
-| `movement_allocations` | reparto de importes por miembro | se carga junto a los movimientos | exposición del reparto financiero |
-| `sessions` | hashes de sesiones, rol, revocación | solo la aplicación crea/revoca/consulta | exposición de credenciales derivadas |
-| `session_migrations` | hashes de binding/código, orígenes, caducidad | flujo de migración con binding de 120 s | exposición de handoffs entre dominios |
+| Objeto | Datos o función | Acceso esperado |
+| --- | --- | --- |
+| `appachas.groups` | nombre, fechas, zona horaria, hashes de enlaces | backend autorizado |
+| `appachas.members` | alias, orden, hashes de sesión | backend autorizado |
+| `appachas.movements` | conceptos, importes, fechas y pagador | backend autorizado |
+| `appachas.movement_allocations` | reparto por miembro | backend autorizado |
+| `appachas.sessions` | hashes, rol y revocación | backend autorizado |
+| `appachas.session_migrations` | hashes, orígenes y caducidad | backend autorizado |
+| `public.alembic_version` | versión de migración | Alembic durante despliegues |
 
-No se encontraron `CREATE VIEW`, `CREATE FUNCTION` ni `CREATE PROCEDURE` en
-las migraciones o scripts. Esto es un inventario de código, no una afirmación
-sobre el catálogo remoto.
+No se encontraron vistas, funciones ni procedimientos en `appachas` o
+`public`, ni en el repositorio ni en el catálogo remoto.
 
-## RLS y privilegios declarados
+## Modelo de seguridad efectivo
 
-`backend/migrations/versions/0001_initial.py` habilita RLS en las cuatro tablas
-base y revoca `ALL` del esquema y de sus tablas para `PUBLIC`. Las migraciones
-`0003_sessions.py` y `0005_session_migrations.py` repiten la revocación y
-habilitan RLS en sus tablas nuevas. No hay `CREATE POLICY`, `ALTER TABLE ...
-FORCE ROW LEVEL SECURITY`, `GRANT` de runtime ni `ALTER DEFAULT PRIVILEGES`.
+Las migraciones `0001`, `0003` y `0005` habilitan RLS en las tablas de
+`appachas` y revocan acceso de `PUBLIC`. El catálogo remoto confirma además que
+los roles Data API carecen de acceso al esquema y a sus tablas. RLS sin
+políticas aplica denegación por defecto a roles sujetos a RLS y funciona aquí
+como segunda barrera para objetos que no deben publicarse.
 
-RLS sin políticas aplica denegación por defecto a roles sujetos a RLS, por lo
-que tampoco expresa el modelo de acceso requerido por Appachas. Además, el
-propietario de una tabla normalmente evita RLS salvo que se fuerce, y un rol
-con `BYPASSRLS` siempre lo evita. Hay que confirmar esto en el proyecto
-enlazado antes de decidir si el modelo debe seguir siendo autorización en la
-aplicación o migrar a un rol no propietario con contexto de sesión.
+El backend usa `postgres` a través de Supavisor. Ese rol es propietario de las
+tablas y tiene `BYPASSRLS`; por tanto, las reglas creador/miembro se aplican en
+FastAPI y no en PostgreSQL. Migrarlas a RLS exigiría primero un rol runtime no
+propietario y un contexto transaccional fiable de identidad por grupo.
 
-### Consulta remota de verificación (solo lectura)
+`public.alembic_version` era la excepción. Los privilegios predeterminados de
+Supabase para objetos `public` concedían CRUD a los roles Data API. Aunque la
+tabla no contiene datos de negocio, su modificación podría falsear el estado de
+migraciones. `0006` corrige el objeto existente y evita que el rol de migración
+repita ese patrón al crear futuras tablas en `public`.
 
-Ejecutar desde un entorno con acceso de administración de solo lectura, sin
-copiar la URL ni resultados con datos de negocio al chat:
+## Evidencia remota read-only
+
+| Comprobación | Resultado |
+| --- | --- |
+| Identidad de auditoría | `supabase_read_only_user`; transacción read-only |
+| Objetos `appachas` | 6 tablas; RLS activo; `FORCE` desactivado; owner `postgres` |
+| Políticas y rutinas | ninguna en `appachas` o `public` |
+| Acceso Data API a `appachas` | sin `USAGE` ni CRUD para roles Data API |
+| Rol tras `/api/health` | `postgres`, aplicación `Supavisor` |
+| Atributos de `postgres` | propietario y `BYPASSRLS=true` |
+| Hallazgo público | `public.alembic_version`, RLS inactivo y CRUD Data API antes de `0006` |
+
+Consultas reproducibles de catálogo, sin filas de negocio:
 
 ```sql
-SELECT current_database(), current_user;
+SELECT current_database(), current_user,
+       current_setting('transaction_read_only');
 
 SELECT n.nspname AS schema_name,
        c.relname AS object_name,
        c.relkind,
        c.relrowsecurity AS rls_enabled,
-       c.relforcerowsecurity AS rls_forced
+       c.relforcerowsecurity AS rls_forced,
+       pg_get_userbyid(c.relowner) AS owner
 FROM pg_class AS c
 JOIN pg_namespace AS n ON n.oid = c.relnamespace
-WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+WHERE n.nspname IN ('appachas', 'public')
   AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
 ORDER BY 1, 2;
 
-SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check
+SELECT schemaname, tablename, policyname, permissive, roles, cmd
 FROM pg_policies
-WHERE schemaname = 'appachas'
-ORDER BY tablename, policyname;
+WHERE schemaname IN ('appachas', 'public')
+ORDER BY schemaname, tablename, policyname;
 
-SELECT routine_schema, routine_name, routine_type
+SELECT routine_schema, routine_name, routine_type, security_type
 FROM information_schema.routines
-WHERE routine_schema NOT IN ('pg_catalog', 'information_schema')
+WHERE routine_schema IN ('appachas', 'public')
 ORDER BY 1, 2;
 
-SELECT rolname, rolsuper, rolinherit, rolcreaterole, rolreplication, rolbypassrls
+SELECT rolname, rolsuper, rolinherit, rolcreaterole, rolreplication,
+       rolbypassrls
 FROM pg_roles
-WHERE rolname = current_user;
-
-SELECT table_schema, table_name, privilege_type, grantee
-FROM information_schema.role_table_grants
-WHERE table_schema = 'appachas'
-ORDER BY table_name, grantee, privilege_type;
+WHERE rolname IN ('postgres', 'anon', 'authenticated', 'service_role');
 ```
 
-La evidencia mínima para cerrar el bloqueo es: catálogo de las seis tablas,
-resultado de `pg_policies`, rol usado por el backend, `rolbypassrls`, si ese rol
-es propietario, y privilegios efectivos. Los resultados deben omitir filas de
-negocio, hashes y valores de secretos.
+## Matriz de autorización de aplicación
 
-## Modelo de acceso y matriz de regresión
-
-La autorización de negocio está separada de la existencia del `group_id`:
-
-- Un enlace de creador permite resolver el grupo y emitir una sesión de
-  creador; la sesión posterior no depende de conservar el enlace.
-- Un enlace de miembro permite obtener metadatos y reclamar una identidad,
-  pero no emite sesión para un miembro no reclamado.
-- Una sesión válida se comprueba contra `sessions`, `members`, grupo, rol y
-  revocación; no puede reutilizarse en otro grupo.
-- Un `group_id` sin enlace/sesión no concede acceso operativo.
-- Enlaces inválidos, grupos cerrados o grupos expirados se presentan como
-  `group_unavailable`/404 para no revelar la causa exacta.
-- Las migraciones entre dominios exigen origen exacto, binding de cookie,
-  código de un solo uso y caducidad de 120 segundos.
-
-| Caso | Resultado esperado | Evidencia |
+| Caso | Resultado esperado | Evidencia automatizada |
 | --- | --- | --- |
-| Anónimo sin enlace | denegado, sin grupo | `/api/group` y `/api/group/metadata` públicos devolvieron `404 group_unavailable` |
-| Creador con enlace válido | permitido para metadata y sesión de creador | `test_creator_link_issues_independent_session_and_cookie_access_needs_no_link` |
-| Miembro con enlace válido sin reclamar | metadata/claim, no sesión operativa | `test_member_link_cannot_issue_session_without_claim` |
-| Miembro reclamado | permitido solo como actor válido | `test_member_link_recovers_only_existing_claim_without_returning_credential` |
+| Anónimo sin enlace | denegado, sin grupo | `/api/group` y `/api/group/metadata` devuelven `404 group_unavailable` |
+| Creador con enlace válido | metadata y sesión de creador | `test_creator_link_issues_independent_session_and_cookie_access_needs_no_link` |
+| Miembro válido sin reclamar | metadata/claim, sin sesión operativa | `test_member_link_cannot_issue_session_without_claim` |
+| Miembro reclamado | permitido como actor válido | `test_member_link_recovers_only_existing_claim_without_returning_credential` |
 | Usuario sin pertenencia | denegado | `test_group_reference_without_link_or_session_cannot_claim_identity` |
-| Sesión revocada | denegado | `test_revoked_creator_session_does_not_authorize_operations` y `test_releasing_identity_revokes_session_access` |
+| Sesión revocada | denegado | `test_revoked_creator_session_does_not_authorize_operations` |
 | Sesión de otro grupo | denegado | `test_session_cannot_be_replayed_for_different_group` |
-| Enlace/migración caducada o ya usada | denegado | `backend/tests/unit/contexts/groups/session_migration/test_migration.py` |
+| Enlace/migración caducado | denegado | pruebas de `session_migration` |
+| Metadata de Alembic | sin acceso público/Data API | `test_alembic_metadata_is_not_exposed_by_default` |
 
 Las pruebas de PostgreSQL cubren además constraints, cascadas, concurrencia,
-revocación persistida y handoffs atómicos. No se ejecutó un flujo E2E que cree
-grupos en producción durante esta revisión.
+revocación persistida y handoffs atómicos. No se creó ningún grupo ni se leyó
+ninguna fila de negocio en producción durante esta auditoría.
 
-## Limpieza recurrente y revisión
+## Revisión recurrente
 
-El cron de aplicación está declarado en `vercel.json`:
+OpenClaw mantiene dos revisiones y ambas estaban operativas al cerrar esta
+auditoría:
 
-```json
-{"path":"/api/internal/expire","schedule":"0 3 * * *"}
-```
+- `appachas-nightly-security`: diaria a las 05:00 Europe/Madrid; última
+  ejecución `ok`.
+- `appachas-weekly-invasive-security`: lunes a las 03:00 Europe/Madrid; última
+  ejecución `ok`.
 
-El endpoint solo acepta `Authorization: Bearer <CRON_SECRET>` y elimina
-grupos expirados y migraciones caducadas. La configuración está presente en el
-checkout; no se probó el secreto contra producción.
+La revisión recurrente debe:
 
-En OpenClaw ya existen dos revisiones de Appachas en el host:
+1. comparar migraciones con `pg_class`, `pg_policies` y privilegios efectivos;
+2. alertar ante nuevas tablas, vistas o rutinas en esquemas expuestos;
+3. confirmar el rol runtime, propietarios y `BYPASSRLS`;
+4. verificar anónimamente `/api/health`, `/api/group` y `/api/group/metadata`;
+5. ejecutar la matriz de autorización en una base aislada, nunca creando datos
+   de producción.
 
-- `appachas-nightly-security`: diaria a las 05:00 Europe/Madrid; al consultar
-  el estado tenía `error (2x)` por una pérdida de lease de binding.
-- `appachas-weekly-invasive-security`: lunes a las 03:00 Europe/Madrid; la
-  última ejecución observada estaba en estado `ok`.
+## Riesgo residual y siguientes pasos
 
-La revisión recurrente debe ejecutar únicamente comprobaciones no destructivas:
-
-1. comparar el inventario de migraciones con `pg_class` y `pg_policies`;
-2. comprobar el rol efectivo, propietario y `rolbypassrls`;
-3. verificar anónimamente `/api/health`, `/api/group` y
-   `/api/group/metadata`;
-4. ejecutar la matriz de autorización en una base aislada, nunca creando datos
-   en producción;
-5. alertar si aparece una tabla/vista/función nueva, un `GRANT` inesperado,
-   desaparece RLS o falla la automatización.
-
-La automatización diaria necesita reparación del binding antes de considerarse
-operativa para APP-5. No se modificó el scheduler desde este checkout.
-
-## Bloqueos y siguiente paso seguro
-
-1. Obtener, mediante el canal de secretos del host, una conexión válida de
-   solo lectura al proyecto Supabase enlazado; no pegarla en issues, logs ni
-   chat.
-2. Ejecutar las consultas anteriores y conservar solo el inventario sin datos.
-3. Si el runtime es propietario/BYPASSRLS, decidir explícitamente entre
-   mantener la autorización de aplicación con privilegios mínimos o diseñar un
-   rol no propietario y un contexto transaccional de sesión.
-4. Solo después escribir políticas específicas para creador, miembro válido,
-   enlace inválido/expirado y usuario sin pertenencia, probarlas con roles
-   reales en una base aislada y verificar regresiones.
+1. Aplicar `0006` mediante el pipeline normal y repetir la consulta remota para
+   confirmar RLS y ausencia de privilegios Data API en `alembic_version`.
+2. Mantener las pruebas de autorización de aplicación como barrera principal y
+   la auditoría de catálogo/grants como detección de regresiones.
+3. Evaluar separadamente un rol runtime no propietario con privilegios mínimos.
+   Reduciría el impacto de una inyección SQL, pero requiere diseño y pruebas
+   propios.
+4. Si Appachas no va a usar la Data API, valorar desactivarla en Supabase. Es un
+   cambio operativo de producción y queda fuera de esta PR.
