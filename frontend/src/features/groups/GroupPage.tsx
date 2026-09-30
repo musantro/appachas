@@ -38,7 +38,13 @@ export function GroupTabs() {
   );
 }
 
-export function Balances({ group }: { group: Group }) {
+export function Balances({
+  group,
+  showSettlementStatus = false,
+}: {
+  group: Group;
+  showSettlementStatus?: boolean;
+}) {
   return (
     <ul aria-label="Balances de integrantes">
       {group.balances.map((balance) => (
@@ -56,6 +62,11 @@ export function Balances({ group }: { group: Group }) {
           <Avatar alias={balance.alias} small />
           <div className="balance-info">
             <strong>{balance.alias}</strong>
+            {showSettlementStatus && (
+              <span className="badge balance-status">
+                {balance.amount_cents === 0 ? "Liquidado" : "Pendiente"}
+              </span>
+            )}
           </div>
           <div
             className={`balance-value${balance.amount_cents > 0 ? " positive" : ""}`}
