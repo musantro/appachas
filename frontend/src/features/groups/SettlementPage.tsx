@@ -14,7 +14,13 @@ import { ConfirmDialog, Feedback, PageHeading } from "../../components/common";
 import { Button } from "../../components/ui/button";
 import { forgetEntryLinks } from "../../lib/access";
 import { api, type Group } from "../../lib/api";
-import { copyText, groupPath, money, shareText } from "../../lib/format";
+import {
+  amountInput,
+  copyText,
+  groupPath,
+  money,
+  shareText,
+} from "../../lib/format";
 import { groupKey, useGroup } from "./GroupContext";
 import { Balances, GroupTabs } from "./GroupPage";
 import { SummaryDownload } from "./SummaryDownload";
@@ -27,6 +33,31 @@ export function SettlementPage() {
   const [error, setError] = useState<unknown>();
   const [busy, setBusy] = useState(false);
   const queryClient = useQueryClient();
+  const record = useMutation({
+    mutationFn: (payment: Group["payments"][number]) =>
+      api.createMovement(groupId, {
+        type: "contribution",
+        amount: amountInput(payment.amount_cents),
+        concept: "",
+        date: group.today < group.end_date ? group.today : group.end_date,
+        payer_id: payment.from_member_id,
+        participant_ids: [],
+        allocations: [
+          {
+            member_id: payment.to_member_id,
+            amount: amountInput(payment.amount_cents),
+          },
+        ],
+      }),
+    onMutate: () => {
+      setMessage("");
+      setError(undefined);
+    },
+    onSuccess: async () => {
+      setMessage("Pago registrado como aportación.");
+      await queryClient.invalidateQueries({ queryKey: groupKey(groupId) });
+    },
+  });
   const close = useMutation({
     mutationFn: () => api.closeGroup(groupId, group.version),
     onSuccess: () => {
@@ -42,7 +73,9 @@ export function SettlementPage() {
   const names = Object.fromEntries(
     snapshot.members.map((member) => [member.id, member.alias]),
   );
+  const actionError = record.error ?? error;
   async function share(copy: boolean) {
+    record.reset();
     setMessage("");
     setError(undefined);
     setBusy(true);
@@ -132,6 +165,18 @@ export function SettlementPage() {
                         <strong>{money(payment.amount_cents)}</strong> a{" "}
                         <strong>{names[payment.to_member_id]}</strong>
                       </p>
+                      {!closedGroup && (
+                        <Button
+                          className="payment-action"
+                          onClick={() => record.mutate(payment)}
+                          disabled={record.isPending}
+                          aria-label={`Registrar pago de ${names[payment.from_member_id]} a ${names[payment.to_member_id]}`}
+                        >
+                          {record.isPending && record.variables === payment
+                            ? "Registrando…"
+                            : "Registrar pago"}
+                        </Button>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -165,7 +210,7 @@ export function SettlementPage() {
                 <p>No quedan pagos pendientes entre los integrantes.</p>
               </div>
             )}
-            <Feedback success={message} error={error} />
+            <Feedback success={message} error={actionError} />
           </section>
           <SummaryDownload group={snapshot} />
           {snapshot.role === "creator" && !closedGroup && (
@@ -204,7 +249,7 @@ export function SettlementPage() {
                 Los balances se calcularán al registrar el primer movimiento.
               </p>
             ) : (
-              <Balances group={snapshot} />
+              <Balances group={snapshot} showSettlementStatus />
             )}
           </section>
           {closedGroup && (

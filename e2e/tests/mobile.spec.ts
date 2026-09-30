@@ -815,6 +815,38 @@ test("mobile settlement copies and shares only payment lines and closing retains
   ).toBeVisible();
 });
 
+test("mobile settlement records one pending payment through the existing contribution flow", async ({
+  page,
+  groups,
+}) => {
+  const created = await groups.create({ members: ["Ana", "Bruno", "Carla"] });
+  await created.creator.write(
+    "POST",
+    "/movements",
+    expenseInput(created.group, { amount: "30" }),
+  );
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto(creatorPath(created, "/settlement"));
+  await noHorizontalOverflow(page);
+
+  await page
+    .getByRole("button", { name: "Registrar pago de Bruno a Ana" })
+    .click();
+
+  await expect(
+    page.getByRole("status").filter({ hasText: "aportación" }),
+  ).toBeVisible();
+  await expect
+    .poll(async () => (await created.creator.read()).movements)
+    .toHaveLength(2);
+  await expect(page.getByText("Liquidado", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Registrar pago de Carla a Ana" }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await noHorizontalOverflow(page);
+});
+
 test("mobile settled groups hide settlement copying and sharing", async ({
   page,
   groups,
