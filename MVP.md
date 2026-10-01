@@ -121,7 +121,7 @@ La fecha final del viaje es el ancla que inicia el control de caducidad. Las com
 
 Al cerrar manualmente, el creador confirma una acción irreversible. La interfaz conserva en esa pantalla el resumen completo, pero no lo guarda localmente. El backend elimina inmediatamente el grupo, integrantes, movimientos y repartos. Cualquier petición posterior devuelve `404`.
 
-El usuario puede descargar voluntariamente un resumen completo en texto desde Liquidación, antes del cierre y mientras siga visible la pantalla de grupo cerrado, incluso sin movimientos o pagos pendientes. Esta descarga no incluye credenciales ni permite recuperar el grupo; no se guarda ninguna copia automáticamente.
+El usuario puede descargar voluntariamente desde Liquidación un CSV tabular de movimientos, antes del cierre y mientras siga visible la pantalla de grupo cerrado, incluso sin movimientos o pagos pendientes. El archivo contiene una fila por destinatario de cada movimiento y no incluye credenciales ni permite recuperar el grupo; no se guarda ninguna copia automáticamente.
 
 La caducidad automática también elimina los datos del backend y hace que el enlace devuelva `404`.
 

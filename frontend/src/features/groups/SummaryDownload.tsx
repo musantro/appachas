@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Feedback } from "../../components/common";
 import { Button } from "../../components/ui/button";
 import type { Group } from "../../lib/api";
-import { downloadGroupSummary } from "../../lib/group-summary";
+import { downloadGroupMovementsCsv } from "../../lib/group-movements-csv";
 
 export function SummaryDownload({ group }: { group: Group }) {
   const [error, setError] = useState<unknown>();
@@ -11,25 +11,25 @@ export function SummaryDownload({ group }: { group: Group }) {
     <section className="card stack-small">
       <h2 className="text-base">Guarda las cuentas</h2>
       <p className="muted">
-        Descarga integrantes, movimientos, repartos, balances y pagos pendientes
-        en un archivo de texto. Guarda tu copia antes de salir: al cerrar el
-        grupo sus datos se eliminan.
+        Descarga una fila por persona y movimiento en un CSV compatible con
+        hojas de cálculo. Guarda tu copia antes de salir: al cerrar el grupo sus
+        datos se eliminan.
       </p>
       <Button
         variant="outline"
         onClick={() => {
           setError(undefined);
           try {
-            downloadGroupSummary(group);
+            downloadGroupMovementsCsv(group);
           } catch {
             setError(
-              "No se pudo descargar el resumen. Inténtalo de nuevo antes de salir.",
+              "No se pudo descargar el CSV. Inténtalo de nuevo antes de salir.",
             );
           }
         }}
       >
         <Download size={18} aria-hidden="true" />
-        Descargar resumen
+        Descargar CSV
       </Button>
       <Feedback error={error} />
     </section>
